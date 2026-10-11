@@ -74,6 +74,12 @@ export function placeTile(
   if (role !== "host") {
     return { ok: false, error: `forbidden role: ${role}` };
   }
+  if (map === null || typeof map !== "object") {
+    return { ok: false, error: "missing map" };
+  }
+  if (tile === null || typeof tile !== "object") {
+    return { ok: false, error: "missing tile" };
+  }
   if (
     !Number.isInteger(tile.x) ||
     !Number.isInteger(tile.y) ||
@@ -84,10 +90,10 @@ export function placeTile(
   ) {
     return { ok: false, error: `out of bounds: ${tile.x},${tile.y}` };
   }
-  if (tile.layer.length === 0) {
+  if (typeof tile.layer !== "string" || tile.layer.length === 0) {
     return { ok: false, error: "missing field: layer" };
   }
-  if (tile.asset.length === 0) {
+  if (typeof tile.asset !== "string" || tile.asset.length === 0) {
     return { ok: false, error: "missing field: asset" };
   }
   const placed: Tile = {

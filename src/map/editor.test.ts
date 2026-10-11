@@ -45,6 +45,21 @@ test("host place rejects out-of-bounds tiles", () => {
   expect(map.tiles).toEqual({});
 });
 
+test("host place with missing fields returns ok:false without throwing", () => {
+  const map = emptyMap();
+  const noLayer = { x: 2, y: 3, asset: "grass" } as unknown as Tile;
+  const noAsset = { x: 2, y: 3, layer: "ground" } as unknown as Tile;
+  expect(() => placeTile(map, noLayer, "host")).not.toThrow();
+  expect(() => placeTile(map, noAsset, "host")).not.toThrow();
+  expect(placeTile(map, noLayer, "host").ok).toBe(false);
+  expect(placeTile(map, noAsset, "host").ok).toBe(false);
+  expect(() =>
+    placeTile(map, null as unknown as Tile, "host"),
+  ).not.toThrow();
+  expect(placeTile(map, null as unknown as Tile, "host").ok).toBe(false);
+  expect(map.tiles).toEqual({});
+});
+
 test("assetHash matches the SHA-256 test vector", () => {
   const abc = new TextEncoder().encode("abc");
   expect(assetHash(abc)).toBe(
