@@ -84,15 +84,37 @@ export function encodeRollResult(result: RollResult): string {
   return JSON.stringify(result);
 }
 
-/** Decode a result from its RoomState JSON value. */
+/** Decode a result from its RoomState JSON value. Validates `rolls.length === count`, faces in `[1,sides]` and `total === sum + mod`. */
 export function decodeRollResult(json: string): RollResult {
   const raw = JSON.parse(json) as Record<string, unknown>;
-  if (typeof raw.sides !== "number") throw new Error("missing field: sides");
-  if (typeof raw.count !== "number") throw new Error("missing field: count");
-  if (typeof raw.mod !== "number") throw new Error("missing field: mod");
+  if (typeof raw.sides !== "number" || !Number.isInteger(raw.sides)) {
+    throw new Error("missing field: sides");
+  }
+  if (typeof raw.count !== "number" || !Number.isInteger(raw.count)) {
+    throw new Error("missing field: count");
+  }
+  if (typeof raw.mod !== "number" || !Number.isFinite(raw.mod)) {
+    throw new Error("missing field: mod");
+  }
   if (!Array.isArray(raw.rolls)) throw new Error("missing field: rolls");
-  if (typeof raw.total !== "number") throw new Error("missing field: total");
-  return raw as unknown as RollResult;
+  if (typeof raw.total !== "number" || !Number.isFinite(raw.total)) {
+    throw new Error("missing field: total");
+  }
+  const { sides, count, mod, rolls, total } = raw as unknown as RollResult;
+  if (rolls.length !== count) {
+    throw new Error(`invalid rolls: length ${rolls.length} expected ${count}`);
+  }
+  let sum = 0;
+  for (const face of rolls) {
+    if (!Number.isInteger(face) || face < 1 || face > sides) {
+      throw new Error(`invalid face: ${String(face)} not in [1,${sides}]`);
+    }
+    sum += face;
+  }
+  if (total !== sum + mod) {
+    throw new Error(`invalid total: ${total} expected ${sum + mod}`);
+  }
+  return { sides, count, mod, rolls: [...rolls], total };
 }
 
 /** Canonical key for a broadcast result: `roll:<id>`. */

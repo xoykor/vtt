@@ -208,10 +208,11 @@ export function cacheAsset(
   return hash;
 }
 
-/** Fetch cached bytes by hash, or `undefined` on cache miss. */
+/** Fetch cached bytes by hash, or `undefined` on cache miss. Returns a copy so callers cannot mutate the cache. */
 export function getAsset(
   cache: Map<string, Uint8Array>,
   hash: string,
 ): Uint8Array | undefined {
-  return cache.get(hash);
+  const hit = cache.get(hash);
+  return hit === undefined ? undefined : hit.slice();
 }

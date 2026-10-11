@@ -40,8 +40,14 @@ export function pointInPolygon(point: Point, polygon: Point[]): boolean {
  * Reveal the cells whose center falls inside `polygon`.
  * Cells outside the polygon keep their previous state (fog is sticky:
  * revealing never re-fogs). Pure: input fog is not mutated.
+ * Throws when `visible.length !== width*height`.
  */
 export function revealFog(fog: Fog, polygon: Point[]): Fog {
+  if (fog.visible.length !== fog.width * fog.height) {
+    throw new Error(
+      `invalid fog mask: length ${fog.visible.length} expected ${fog.width * fog.height}`,
+    );
+  }
   const visible = [...fog.visible];
   for (let y = 0; y < fog.height; y++) {
     for (let x = 0; x < fog.width; x++) {

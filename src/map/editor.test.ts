@@ -78,3 +78,19 @@ test("asset cache stores bytes under their hash", () => {
   expect(getAsset(cache, hash)).toEqual(bytes);
   expect(getAsset(cache, "deadbeef")).toBeUndefined();
 });
+
+test("getAsset returns a copy; mutating it or the input cannot poison the cache", () => {
+  const cache = createAssetCache();
+  const bytes = new TextEncoder().encode("grass pixels");
+  const hash = cacheAsset(cache, bytes);
+  // Mutating the caller's input after store must not affect the cache.
+  bytes[0] = 0xff;
+  expect(getAsset(cache, hash)).toEqual(new TextEncoder().encode("grass pixels"));
+  // Mutating the returned view must not affect the cache.
+  const first = getAsset(cache, hash);
+  if (first === undefined) throw new Error("cache miss");
+  first[0] = 0x00;
+  expect(getAsset(cache, hash)).toEqual(
+    new TextEncoder().encode("grass pixels"),
+  );
+});

@@ -49,6 +49,27 @@ test("host diffuses the result to everyone via applyDelta", () => {
   expect(encodeRollResult(result)).toContain('"total":1');
 });
 
+test("decodeRollResult validates length, faces and total", () => {
+  const good = resolveRoll({ sides: 6, count: 2, mod: 3 }, () => 0);
+  expect(decodeRollResult(encodeRollResult(good))).toEqual(good);
+  const short = { ...good, rolls: [1] };
+  expect(() => decodeRollResult(JSON.stringify(short))).toThrow(
+    /invalid rolls/,
+  );
+  const badFace = { ...good, rolls: [1, 7] };
+  expect(() => decodeRollResult(JSON.stringify(badFace))).toThrow(
+    /invalid face/,
+  );
+  const zeroFace = { ...good, rolls: [1, 0] };
+  expect(() => decodeRollResult(JSON.stringify(zeroFace))).toThrow(
+    /invalid face/,
+  );
+  const badTotal = { ...good, total: good.total + 1 };
+  expect(() => decodeRollResult(JSON.stringify(badTotal))).toThrow(
+    /invalid total/,
+  );
+});
+
 test("scene only renders the host-resolved result", () => {
   const result = resolveRoll({ sides: 6, count: 2 }, () => 0);
   const frame = frameForResult(result);

@@ -95,6 +95,16 @@ export function createSrdCache(): Map<string, Sheet> {
   return new Map<string, Sheet>();
 }
 
+/** Deep-clone a Sheet (abilities is cloned, never shared). */
+function cloneSheet(sheet: Sheet): Sheet {
+  return {
+    ...sheet,
+    ...(sheet.abilities !== undefined
+      ? { abilities: { ...sheet.abilities } }
+      : {}),
+  };
+}
+
 const OPEN5E_MONSTER_URL = "https://api.open5e.com/monsters/";
 
 export interface FetchLike {
@@ -114,12 +124,12 @@ export async function fetchSrd(
 ): Promise<Sheet> {
   if (slug.length === 0) throw new Error("missing slug");
   const hit = cache.get(slug);
-  if (hit !== undefined) return { ...hit };
+  if (hit !== undefined) return cloneSheet(hit);
   const res = await fetchFn(`${OPEN5E_MONSTER_URL}${slug}/`);
   if (!res.ok) throw new Error(`srd fetch failed: ${slug}`);
   const sheet = importMonster((await res.json()) as SrdMonsterEntry);
-  cache.set(slug, { ...sheet });
-  return { ...sheet };
+  cache.set(slug, cloneSheet(sheet));
+  return cloneSheet(sheet);
 }
 
 /**
@@ -150,7 +160,7 @@ export function encodeSheet(sheet: Sheet): string {
   return JSON.stringify(sheet);
 }
 
-/** Decode a sheet from its RoomState JSON value. */
+/** Decode a sheet from its RoomState JSON value. Validates the 6 ability fields when `abilities` is present. */
 export function decodeSheet(json: string): Sheet {
   const raw = JSON.parse(json) as Record<string, unknown>;
   if (typeof raw.id !== "string" || raw.id.length === 0) {
@@ -164,5 +174,31 @@ export function decodeSheet(json: string): Sheet {
   if (typeof raw.maxHp !== "number") {
     throw new Error("missing field: maxHp");
   }
-  return raw as unknown as Sheet;
+  const sheet: Sheet = {
+    id: raw.id,
+    name: raw.name,
+    ac: raw.ac,
+    hp: raw.hp,
+    maxHp: raw.maxHp,
+  };
+  if (raw.abilities !== undefined) {
+    const ab = raw.abilities as Record<string, unknown> | null;
+    if (typeof ab !== "object" || ab === null) {
+      throw new Error("missing field: abilities");
+    }
+    for (const key of ["str", "dex", "con", "int", "wis", "cha"] as const) {
+      if (typeof ab[key] !== "number" || !Number.isFinite(ab[key] as number)) {
+        throw new Error(`missing field: abilities.${key}`);
+      }
+    }
+    sheet.abilities = {
+      str: ab.str as number,
+      dex: ab.dex as number,
+      con: ab.con as number,
+      int: ab.int as number,
+      wis: ab.wis as number,
+      cha: ab.cha as number,
+    };
+  }
+  return sheet;
 }

@@ -39,8 +39,14 @@ function hasLineOfSight(map: LightMap, from: Point, tx: number, ty: number): boo
 /**
  * Compute the lit mask for `sources` over `map` (row-major booleans,
  * true = lit). Pure: inputs are not mutated.
+ * Throws when `walls.length !== width*height`.
  */
 export function computeLight(map: LightMap, sources: LightSource[]): boolean[] {
+  if (map.walls.length !== map.width * map.height) {
+    throw new Error(
+      `invalid walls mask: length ${map.walls.length} expected ${map.width * map.height}`,
+    );
+  }
   const mask = new Array(map.width * map.height).fill(false);
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {

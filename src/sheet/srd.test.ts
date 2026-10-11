@@ -92,3 +92,85 @@ test("sheet encodes to snapshot state and back", () => {
   const s = importMonster(goblinSrd);
   expect(decodeSheet(encodeSheet(s))).toEqual(s);
 });
+
+test("fetchSrd deep-clones abilities on store and hit", async () => {
+  const payload = {
+    ...goblinSrd,
+    strength: 8,
+    dexterity: 14,
+    constitution: 10,
+    intelligence: 10,
+    wisdom: 8,
+    charisma: 8,
+  };
+  const stubFetch = async (_url: string) => ({
+    ok: true,
+    json: async () => payload,
+  });
+  const cache = createSrdCache();
+  const first = await fetchSrd(
+    "goblin",
+    stubFetch as unknown as typeof fetch,
+    cache,
+  );
+  expect(first.abilities).toEqual({
+    str: 8,
+    dex: 14,
+    con: 10,
+    int: 10,
+    wis: 8,
+    cha: 8,
+  });
+  // Mutating the returned abilities must not poison the cache.
+  if (first.abilities) first.abilities.str = 1;
+  const second = await fetchSrd(
+    "goblin",
+    stubFetch as unknown as typeof fetch,
+    cache,
+  );
+  expect(second.abilities?.str).toBe(8);
+  // Mutating a hit must not poison later hits either.
+  if (second.abilities) second.abilities.dex = 1;
+  const third = await fetchSrd(
+    "goblin",
+    stubFetch as unknown as typeof fetch,
+    cache,
+  );
+  expect(third.abilities?.dex).toBe(14);
+});
+
+test("decodeSheet validates the 6 ability fields when present", () => {
+  const good = importMonster({
+    ...goblinSrd,
+    strength: 8,
+    dexterity: 14,
+    constitution: 10,
+    intelligence: 10,
+    wisdom: 8,
+    charisma: 8,
+  });
+  expect(decodeSheet(encodeSheet(good)).abilities).toEqual({
+    str: 8,
+    dex: 14,
+    con: 10,
+    int: 10,
+    wis: 8,
+    cha: 8,
+  });
+  const base = JSON.parse(encodeSheet(good)) as Record<string, unknown>;
+  const missingOne = {
+    ...base,
+    abilities: { str: 8, dex: 14, con: 10, int: 10, wis: 8 },
+  };
+  expect(() => decodeSheet(JSON.stringify(missingOne))).toThrow(
+    /abilities\.cha/,
+  );
+  const badType = { ...base, abilities: { ...good.abilities, str: "8" } };
+  expect(() => decodeSheet(JSON.stringify(badType))).toThrow(
+    /abilities\.str/,
+  );
+  const nonFinite = { ...base, abilities: { ...good.abilities, dex: null } };
+  expect(() => decodeSheet(JSON.stringify(nonFinite))).toThrow(
+    /abilities\.dex/,
+  );
+});

@@ -1,6 +1,9 @@
 // Tokens with id, pos, hp (pure, hermetic). Token state travels as
 // RoomState (Record<string, string>, one JSON token per key) so deltas
 // from moveToken apply directly via applyDelta from src/net/peer.ts.
+// Only the host moves tokens: moveToken takes a `role` and any non-host
+// role gets `ok: false` (fail-closed), mirroring placeTile in
+// src/map/editor.ts.
 
 import type { Delta } from "../net/peer";
 import type { Point } from "./grid";
@@ -11,8 +14,22 @@ export interface Token {
   hp: number;
 }
 
+export type MoveResult =
+  | { ok: true; delta: Delta }
+  | { ok: false; error: string };
+
+function checkPos(pos: Point): string | null {
+  if (pos === null || typeof pos !== "object") return "missing field: pos";
+  if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
+    return `invalid pos: ${String(pos?.x)},${String(pos?.y)}`;
+  }
+  return null;
+}
+
 export function createToken(id: string, pos: Point, hp: number): Token {
   if (id.length === 0) throw new Error("missing token id");
+  const posErr = checkPos(pos);
+  if (posErr !== null) throw new Error(posErr);
   if (!Number.isFinite(hp)) throw new Error(`invalid hp: ${hp}`);
   return { id, pos: { x: pos.x, y: pos.y }, hp };
 }
@@ -35,6 +52,9 @@ export function decodeToken(json: string): Token {
   ) {
     throw new Error("missing field: pos");
   }
+  if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
+    throw new Error(`invalid pos: ${String(pos.x)},${String(pos.y)}`);
+  }
   if (typeof raw.hp !== "number") throw new Error("missing field: hp");
   return { id: raw.id, pos: { x: pos.x, y: pos.y }, hp: raw.hp };
 }
@@ -42,16 +62,30 @@ export function decodeToken(json: string): Token {
 /**
  * Move token `id` to `pos`, returning the delta to broadcast over
  * ordered TCP (host-authoritative). Pure: `state` is not mutated.
- * Throws on unknown token.
+ * Only the `host` role writes; every other role (e.g. `player`) is
+ * denied with `ok: false` (fail-closed, same semantics as placeTile).
+ * Unknown tokens and non-finite positions also return `ok: false`
+ * instead of throwing.
  */
 export function moveToken(
   state: Record<string, string>,
   id: string,
   pos: Point,
-): Delta {
+  role: string,
+): MoveResult {
+  if (role !== "host") {
+    return { ok: false, error: `forbidden role: ${role}` };
+  }
+  const posErr = checkPos(pos);
+  if (posErr !== null) return { ok: false, error: posErr };
   const raw = state[id];
-  if (raw === undefined) throw new Error(`unknown token: ${id}`);
-  const token = decodeToken(raw);
+  if (raw === undefined) return { ok: false, error: `unknown token: ${id}` };
+  let token: Token;
+  try {
+    token = decodeToken(raw);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "bad token" };
+  }
   const next: Token = { ...token, id, pos: { x: pos.x, y: pos.y } };
-  return { upsert: { [id]: encodeToken(next) } };
+  return { ok: true, delta: { upsert: { [id]: encodeToken(next) } } };
 }
