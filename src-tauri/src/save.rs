@@ -325,9 +325,28 @@ impl<'a> JsonParser<'a> {
                         b't' => buf.push(b'\t'),
                         b'u' => {
                             let code = self.parse_hex4()?;
-                            let ch = char::from_u32(code).ok_or_else(|| {
-                                "malformed save json: bad \\u escape".to_string()
-                            })?;
+                            let ch = if (0xD800..0xDC00).contains(&code) {
+                                let low = self.parse_unicode_escape()?;
+                                if !(0xDC00..0xE000).contains(&low) {
+                                    return Err("malformed save json: lone surrogate"
+                                        .to_string());
+                                }
+                                let full = 0x10000
+                                    + ((code - 0xD800) << 10)
+                                    + (low - 0xDC00);
+                                char::from_u32(full).ok_or_else(|| {
+                                    "malformed save json: bad \\u escape"
+                                        .to_string()
+                                })?
+                            } else if (0xDC00..0xE000).contains(&code) {
+                                return Err("malformed save json: lone surrogate"
+                                    .to_string());
+                            } else {
+                                char::from_u32(code).ok_or_else(|| {
+                                    "malformed save json: bad \\u escape"
+                                        .to_string()
+                                })?
+                            };
                             let mut tmp = [0u8; 4];
                             buf.extend_from_slice(ch.encode_utf8(&mut tmp).as_bytes());
                         }
@@ -361,6 +380,17 @@ impl<'a> JsonParser<'a> {
             .map_err(|_| "malformed save json: bad \\u escape".to_string())?;
         self.pos += 4;
         Ok(code)
+    }
+
+    fn parse_unicode_escape(&mut self) -> Result<u32, String> {
+        if self.peek() == Some(b'\\')
+            && self.bytes.get(self.pos + 1) == Some(&b'u')
+        {
+            self.pos += 2;
+            self.parse_hex4()
+        } else {
+            Err("malformed save json: lone surrogate".to_string())
+        }
     }
 
     /// Skip one arbitrary JSON value (unknown fields accept anything).
@@ -749,5 +779,30 @@ mod tests {
         assert!(entry.contains("ON CONFLICT (key)"), "got: {entry}");
         assert!(SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS meta"));
         assert!(SCHEMA_SQL.contains("CREATE TABLE IF NOT EXISTS state"));
+    }
+
+    #[test]
+    fn json_combines_surrogate_pairs_and_rejects_lone_ones() {
+        // 😀 U+1F600 as a surrogate pair, same as proto.rs.
+        let json = "{\"version\":\"1.0\",\"room\":\"a\\ud83d\\ude00b\",\"state\":{}}";
+        let save = import_json(json).unwrap();
+        assert_eq!(save.room, "a\u{1F600}b");
+        // Round-trip keeps the emoji byte-identical.
+        let wire = export_json(&save);
+        assert!(wire.contains("\u{1F600}"), "got: {wire}");
+        let back = import_json(&wire).unwrap();
+        assert_eq!(back, save);
+        // Lone surrogates are rejected (high without low, bare low).
+        for bad in [
+            "{\"version\":\"1.0\",\"room\":\"a\\ud83db\",\"state\":{}}",
+            "{\"version\":\"1.0\",\"room\":\"a\\ude00b\",\"state\":{}}",
+            "{\"version\":\"1.0\",\"room\":\"a\\ud83d\\\"x\\\":1,\"state\":{}}",
+        ] {
+            let err = import_json(bad).unwrap_err();
+            assert!(
+                err.contains("lone surrogate") || err.contains("bad \\u escape"),
+                "input {bad:?} gave: {err}"
+            );
+        }
     }
 }

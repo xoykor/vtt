@@ -38,23 +38,28 @@ pub struct Delta {
 
 fn check_port(port: u16) -> Result<u16, String> {
     if port == 0 {
-        return Err("port must be 1-65535".to_string());
+        return Err(format!(
+            "invalid port: {port} (use 1-65535; if peers cannot connect over the internet, host via a ZeroTier/Radmin/Hamachi VPN and share that IP)"
+        ));
     }
     Ok(port)
 }
 
+const VPN_HINT: &str =
+    "if peers cannot connect over the internet, host via a ZeroTier/Radmin/Hamachi VPN and share that IP";
+
 fn check_ipv4(ip: &str) -> Result<(), String> {
     let parts: Vec<&str> = ip.split('.').collect();
     if parts.len() != 4 {
-        return Err(format!("invalid ip: {ip}"));
+        return Err(format!("invalid ip: {ip} ({VPN_HINT})"));
     }
     for part in &parts {
         if part.is_empty() || (part.len() > 1 && part.starts_with('0')) {
-            return Err(format!("invalid ip: {ip}"));
+            return Err(format!("invalid ip: {ip} ({VPN_HINT})"));
         }
         match part.parse::<u8>() {
             Ok(_) => {}
-            Err(_) => return Err(format!("invalid ip: {ip}")),
+            Err(_) => return Err(format!("invalid ip: {ip} ({VPN_HINT})")),
         }
     }
     Ok(())
@@ -62,19 +67,21 @@ fn check_ipv4(ip: &str) -> Result<(), String> {
 
 /// Host a room on `port`. The room id is deterministic (`room-<port>`)
 /// so tests stay hermetic; unique ids/transport land in later tasks.
-pub fn create_room(port: u16) -> RoomInfo {
-    let port = check_port(port).expect("create_room: port must be 1-65535");
-    RoomInfo {
+/// Returns `Err` on port 0 instead of panicking (fail-closed like `join_room`).
+pub fn create_room(port: u16) -> Result<RoomInfo, String> {
+    let port = check_port(port)?;
+    Ok(RoomInfo {
         room: format!("room-{port}"),
         port,
         version: PROTOCOL_VERSION.to_string(),
-    }
+    })
 }
 
 /// Join the room hosted at `ip:port` as guest.
+/// Errors include the `ip:port` and suggest a ZeroTier/Radmin/Hamachi VPN when the address is invalid or unreachable.
 pub fn join_room(ip: &str, port: u16) -> Result<Peer, String> {
-    check_ipv4(ip)?;
-    let port = check_port(port)?;
+    check_ipv4(ip).map_err(|e| format!("{e} [join {ip}:{port}]"))?;
+    let port = check_port(port).map_err(|e| format!("{e} [join {ip}:{port}]"))?;
     Ok(Peer {
         ip: ip.to_string(),
         port,
@@ -84,6 +91,9 @@ pub fn join_room(ip: &str, port: u16) -> Result<Peer, String> {
 
 /// Pure state transition: returns the state with `delta` applied,
 /// leaving the input untouched for Tasks 3-6 to consume.
+/// Remove-wins: upserts apply first, then removes, so a key in both is deleted.
+/// NOTE: `Delta` here has required `upsert`/`remove` vecs while the TS mirror
+/// (`src/net/peer.ts`) uses optional fields; the future FFI bridge must adapt between the two shapes.
 pub fn apply_delta(
     state: &BTreeMap<String, String>,
     delta: &Delta,
