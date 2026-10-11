@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 import {
   applyDelta,
   createRoom,
   joinRoom,
   type RoomState,
 } from "../src/net/peer";
-import { createToken, encodeToken } from "../src/map/tokens";
+import { createToken, decodeToken, encodeToken } from "../src/map/tokens";
 
 // Task 7 E2E: rejoin recebe o snapshot do host sem duplicar tokens.
 //
@@ -79,4 +81,38 @@ test("rejoin gets snapshot without dup tokens", async () => {
 
 test("rejoin keeps unique token ids", async () => {
   await expect(room.tokenIds()).toEqual(["dm", "p1", "p2", "p3", "p4", "p5"]);
+});
+
+// Cross-boundary golden (review Task 7 round 1): este fixture é gerado
+// pelo Rust (`src-tauri/tests/golden_test.rs` via `save::export_json`,
+// bytes fixados em `EXPECTED_GOLDEN_JSON`; regen: `cargo test --test
+// golden_test`). O teste alimenta o JSON do Rust no caminho real do TS
+// (`applyDelta`/snapshot + `decodeToken`) e valida os mesmos 6 ids sem
+// duplicatas — divergência na fronteira FFI falha aqui e no Rust.
+test("rust golden fixture restores 6 tokens without dups", async () => {
+  // O spec roda como CommonJS (sem `"type": "module"` no package.json),
+  // logo `__dirname` = `e2e/` — robusto a cwd de invocação.
+  const raw = fs.readFileSync(
+    path.join(__dirname, "fixtures", "save-golden.json"),
+    "utf-8",
+  );
+  const doc = JSON.parse(raw) as {
+    version: string;
+    room: string;
+    state: RoomState;
+  };
+  expect(doc.version).toBe("1.0");
+  expect(doc.room).toBe("room-7000");
+  // Serialização Rust↔TS byte-idêntica (paridade `encodeToken`).
+  expect(doc.state["dm"]).toBe('{"id":"dm","pos":{"x":0,"y":0},"hp":10}');
+  // Snapshot do host aplicado pelo caminho real de deltas TCP.
+  const guest = applyDelta({}, { upsert: doc.state });
+  const ids = Object.keys(guest).sort();
+  expect(ids).toEqual(["dm", "p1", "p2", "p3", "p4", "p5"]);
+  for (const id of ids) {
+    expect(decodeToken(guest[id]).id).toBe(id);
+  }
+  // Rejoin: segundo snapshot substitui, nunca duplica.
+  const rejoined: RoomState = { ...doc.state };
+  expect(Object.keys(rejoined)).toHaveLength(6);
 });
