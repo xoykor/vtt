@@ -10,5 +10,93 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p vtt-tauri --test health_test
+        with:
+          components: clippy
+      # Task 1 minor corrigido aqui: `-p vtt-tauri` era redundante com
+      # `working-directory: src-tauri` (um único pacote no workspace).
+      - run: cargo test
         working-directory: src-tauri
+      # Clippy consultivo (sem -D warnings): há warnings parados das
+      # Tasks 1 (health_test) e 4 (assets) fora do escopo desta task.
+      - run: cargo clippy --all-targets
+        working-directory: src-tauri
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  # Release grátis via GitHub Releases (Win/Linux/Mac). Roda só em tags
+  # `v*` para manter push/PR verdes sem o bootstrap Tauri completo.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, web]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: ""
+          - os: ubuntu-22.04
+            args: ""
+          - os: macos-latest
+            args: "--target universal-apple-darwin"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: install frontend deps
+        run: npm ci --ignore-scripts
+      - name: build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "VTT ${{ github.ref_name }}"
+          releaseDraft: true
+          args: ${{ matrix.args }}
+
+  # APK Android auto-assinado via GitHub Releases (sem iOS: conta Apple
+  # paga quebra a restrição grátis). Roda só em tags `v*`.
+  android:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+      - uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+      - name: install frontend deps
+        run: npm ci --ignore-scripts
+      - name: init Android project
+        run: npx --yes @tauri-apps/cli android init
+      - name: build APK
+        run: npx --yes @tauri-apps/cli android build --apk
+      - name: upload APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
