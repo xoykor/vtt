@@ -41,7 +41,9 @@ jobs:
       - run: npm run test:unit
       - run: npm run typecheck
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      # Task 6: full E2E suite — room.spec.ts (hermetic rejoin)
+      # + lan.spec.ts (real loopback TCP: snapshot + delta).
+      - run: npx playwright test e2e/
 
   # Release grátis via GitHub Releases (Win/Linux/Mac). Roda só em tags
   # `v*` para manter push/PR verdes sem o bootstrap Tauri completo.
