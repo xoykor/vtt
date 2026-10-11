@@ -37,23 +37,36 @@ export interface OfflineRoom {
 }
 
 /**
+ * Canonical key for a hosted token: `token:<id>`. Tokens live in their
+ * own partition of the flat RoomState so roll/sheet deltas (`roll:*`,
+ * sheet keys) applied via `apply()` never pollute `tokenCount()` /
+ * `tokens()` — same namespacing convention as `tile:*` and `roll:*`.
+ */
+export function tokenKey(id: string): string {
+  if (id.length === 0) throw new Error("missing token id");
+  return `token:${id}`;
+}
+/**
  * Host `memberIds` locally: one token per member on row 0
- * (`{x: i, y: 0}`, hp 10). Pure host simulation; no sockets.
+ * (`{x: i, y: 0}`, hp 10) under `token:<id>` keys. Pure host
+ * simulation; no sockets.
  */
 export function createOfflineRoom(memberIds: string[]): OfflineRoom {
   const info = createRoom(5199);
   let state: RoomState = {};
   memberIds.forEach((id, i) => {
     const token = createToken(id, { x: i, y: 0 }, 10);
-    state = applyDelta(state, { upsert: { [id]: encodeToken(token) } });
+    state = applyDelta(state, { upsert: { [tokenKey(id)]: encodeToken(token) } });
   });
   return {
     info,
     tokenCount(): number {
-      return Object.keys(state).length;
+      return Object.keys(state).filter((k) => k.startsWith("token:")).length;
     },
     tokens(): Token[] {
-      return Object.values(state).map((json) => decodeToken(json));
+      return Object.entries(state)
+        .filter(([k]) => k.startsWith("token:"))
+        .map(([, json]) => decodeToken(json));
     },
     getState(): RoomState {
       return { ...state };
@@ -62,9 +75,17 @@ export function createOfflineRoom(memberIds: string[]): OfflineRoom {
       state = applyDelta(state, delta);
     },
     moveToken(id: string, pos: Point): boolean {
-      const res = moveToken(state, id, pos, "host");
+      // The ready moveToken() addresses tokens by bare id within its
+      // partition: project the token entry as that view, then remap the
+      // returned delta key back to the `token:<id>` partition.
+      const key = tokenKey(id);
+      const res = moveToken({ [id]: state[key] }, id, pos, "host");
       if (!res.ok) return false;
-      state = applyDelta(state, res.delta);
+      const upsert: Record<string, string> = {};
+      for (const [k, v] of Object.entries(res.delta.upsert ?? {})) {
+        upsert[k === id ? key : k] = v;
+      }
+      state = applyDelta(state, { ...res.delta, upsert });
       return true;
     },
   };
