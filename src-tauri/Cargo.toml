@@ -19,6 +19,7 @@ default = []
 tauri-app = ["dep:tauri", "dep:tauri-build"]
 
 [dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }
 tauri = { version = "2", optional = true }
 tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros", "io-util", "time"] }
 
