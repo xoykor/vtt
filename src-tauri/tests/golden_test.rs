@@ -10,7 +10,7 @@
 //! 6 ids without duplicates.
 
 #[allow(dead_code)]
-#[path = "../src/main.rs"]
+#[path = "../src/lib.rs"]
 mod main;
 use main::save::{export_json, import_json, snapshot, GameSave, SAVE_VERSION};
 use std::collections::BTreeMap;

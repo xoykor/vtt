@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[path = "../src/main.rs"]
+#[path = "../src/lib.rs"]
 mod main;
 use main::net::{apply_delta, create_room, handshake, join_room};
 

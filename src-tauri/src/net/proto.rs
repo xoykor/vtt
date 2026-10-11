@@ -11,6 +11,10 @@
 /// Protocol version spoken by this build.
 pub const PROTOCOL_VERSION: &str = "1.0";
 
+/// Major version of [`PROTOCOL_VERSION`] as an integer for semver gates
+/// (used by `tests/health_test.rs::lib_exposes_net_and_save`).
+pub const PROTOCOL_VERSION_MAJOR: u32 = 1;
+
 /// mDNS service type announced by hosts.
 pub const MDNS_SERVICE: &str = "_vtt._tcp";
 
@@ -414,6 +418,17 @@ pub fn decode_handshake(json: &str) -> Result<Handshake, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_major_matches_version_string() {
+        let major: u32 = PROTOCOL_VERSION
+            .split('.')
+            .next()
+            .expect("version has major")
+            .parse()
+            .expect("major is numeric");
+        assert_eq!(PROTOCOL_VERSION_MAJOR, major);
+    }
 
     #[test]
     fn roundtrip_preserves_fields() {

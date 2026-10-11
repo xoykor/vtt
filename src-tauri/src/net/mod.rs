@@ -8,8 +8,9 @@
 pub mod proto;
 
 pub use proto::{
-    Channel, Handshake, MDNS_SERVICE, PROTOCOL_VERSION, Role, decode_handshake,
-    encode_handshake, handshake,
+    Channel, Handshake, MDNS_SERVICE, PROTOCOL_VERSION,
+    PROTOCOL_VERSION_MAJOR, Role, decode_handshake, encode_handshake,
+    handshake,
 };
 use std::collections::BTreeMap;
 

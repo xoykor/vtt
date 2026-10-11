@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[path = "../src/main.rs"]
+#[path = "../src/lib.rs"]
 mod main;
 use main::assets::{asset_hash, verify_asset, AssetCache};
 

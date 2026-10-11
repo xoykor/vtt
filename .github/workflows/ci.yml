@@ -12,9 +12,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # Task 2: system deps for the real Tauri 2 shell (webkit/gtk).
+      - name: install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       # Task 1 minor corrigido aqui: `-p vtt-tauri` era redundante com
       # `working-directory: src-tauri` (um único pacote no workspace).
       - run: cargo test
+        working-directory: src-tauri
+      # Task 2: real Tauri 2 bootstrap — resolves crates.io with network.
+      - run: cargo build --features tauri-app
         working-directory: src-tauri
       # Clippy consultivo (sem -D warnings): há warnings parados das
       # Tasks 1 (health_test) e 4 (assets) fora do escopo desta task.
