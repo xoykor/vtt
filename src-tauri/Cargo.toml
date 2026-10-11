@@ -1,0 +1,8 @@
+[package]
+name = "vtt-tauri"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "vtt-tauri"
+path = "src/main.rs"
