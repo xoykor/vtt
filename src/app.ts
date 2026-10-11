@@ -56,7 +56,7 @@ function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<unkno
     __TAURI__?: { core?: { invoke?: InvokeFn }; invoke?: InvokeFn };
   }).__TAURI__;
   const fn = scope?.core?.invoke ?? scope?.invoke;
-  if (!fn) throw new Error("tauri invoke unavailable (browser offline)");
+  if (!fn) return Promise.reject(new Error("tauri invoke unavailable (browser offline)"));
   return fn(cmd, args);
 }
 

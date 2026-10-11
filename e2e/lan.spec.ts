@@ -1,6 +1,20 @@
 // Task 6 E2E: real loopback LAN — host listener + guest dialer
 // exchanging snapshot + delta over REAL TCP (127.0.0.1:0).
 //
+// PROTOCOL-CONFORMANCE TEST (NOT Rust binary interop):
+// This spec validates the TypeScript codecs (encodeHandshake/
+// decodeHandshake, handshake version gate, applyDelta, moveToken,
+// decodeToken) against the wire protocol specification — u32-BE
+// length-prefixed frames carrying JSON — independent of the Rust
+// serve_once/connect_handshake implementation. The host here is a
+// Node net.Server that re-implements the wire protocol in-process;
+// it does NOT exercise the Rust binary's TCP path.
+//
+// True Rust↔Rust loopback interop is covered by tcp_test.rs
+// (src-tauri/src/net/tcp_test.rs). True Rust↔TS interop would
+// require a dedicated src-tauri/src/bin/ entry point exposing
+// the native socket path to the TS layer — future work.
+//
 // Unlike e2e/room.spec.ts (transport-free, pure functions), this
 // spec opens real OS sockets in-process: the host is a genuine
 // net.Server bound to an ephemeral loopback port and the guest is

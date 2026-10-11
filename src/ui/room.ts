@@ -156,7 +156,7 @@ export async function joinVia(
       `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
     );
   }
-  if (!Number.isInteger(replyPort) || (replyPort as number) < 1) {
+  if (!Number.isInteger(replyPort) || (replyPort as number) < 1 || (replyPort as number) > 65535) {
     throw new Error(
       `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
     );
