@@ -1,3 +1,6 @@
+#[allow(dead_code, unused_imports)]
+pub mod net;
+
 pub fn app_health() -> bool {
     true
 }
