@@ -22,7 +22,9 @@ import { encodeToken } from "./map/tokens";
 import type { Delta } from "./net/peer";
 import {
   createOfflineRoom,
+  guestJoinNotice,
   joinVia,
+  replaceDelta,
   tokenKey,
   type InvokeFn,
   type OfflineRoom,
@@ -89,10 +91,20 @@ export function startApp(root: HTMLElement): void {
 
   // Task 4 lobby: real host + real join via the Tauri window. The browser
   // path skips this entirely (stays offline, no invoke calls).
+  //
+  // `backend` exists ONLY after a successful `create_room` (fix
+  // round 1): `join_room` stores no host state, so a guest holds no
+  // backend — Push/Sync stay disabled on the guest path with a
+  // clear status message instead of erroring `no room hosted yet`
+  // on every move.
   let backend: Backend | null = null;
+  let guest = false;
   if (isTauri()) {
     const status = document.createElement("div");
     status.textContent = "Tauri: invoke pronto.";
+    const setStatus = (msg: string): void => {
+      status.textContent = msg;
+    };
     const lobby = document.createElement("div");
     lobby.style.display = "flex";
     lobby.style.gap = "8px";
@@ -106,10 +118,12 @@ export function startApp(root: HTMLElement): void {
     hostBtn.addEventListener("click", () => {
       tauriInvoke("create_room", { port: Number(portInput.value) })
         .then((reply) => {
-          status.textContent = `Sala hospedada: ${String(reply)}`;
+          guest = false;
+          if (!backend) backend = makeBackend(room, setStatus, draw);
+          setStatus(`Sala hospedada: ${String(reply)}`);
         })
         .catch((e: Error) => {
-          status.textContent = `Hospedar falhou: ${e.message}`;
+          setStatus(`Hospedar falhou: ${e.message}`);
         });
     });
 
@@ -121,35 +135,32 @@ export function startApp(root: HTMLElement): void {
     joinBtn.addEventListener("click", () => {
       joinVia(addrInput.value, invokeViaBridge)
         .then((info) => {
-          status.textContent = `Na sala ${info.room} (porta ${info.port}).`;
+          guest = true;
+          setStatus(guestJoinNotice(info));
         })
         .catch((e: Error) => {
-          status.textContent = `Entrar falhou: ${e.message}`;
+          setStatus(`Entrar falhou: ${e.message}`);
         });
     });
 
     const syncBtn = document.createElement("button");
     syncBtn.textContent = "Sincronizar";
     syncBtn.addEventListener("click", () => {
-      if (backend) {
+      if (backend && !guest) {
         backend.pullSnapshot().catch((e: Error) => {
-          status.textContent = `Sincronizar falhou: ${e.message}`;
+          setStatus(`Sincronizar falhou: ${e.message}`);
         });
+      } else if (guest) {
+        setStatus(
+          "Sincronizar desabilitado para convidados (só o host sincroniza).",
+        );
       } else {
-        status.textContent = "Nada para sincronizar (hospede primeiro).";
+        setStatus("Nada para sincronizar (hospede primeiro).");
       }
     });
 
     lobby.append(portInput, hostBtn, addrInput, joinBtn, syncBtn);
     root.append(lobby, status);
-
-    // From here on the local shell mirrors into the hosted room:
-    // every local delta is pushed best-effort, and Sincronizar pulls the
-    // host snapshot wholesale (same remove-wins path as the guest).
-    const setStatus = (msg: string): void => {
-      status.textContent = msg;
-    };
-    backend = makeBackend(room, setStatus, draw);
   }
 
   const wrap = document.createElement("div");
@@ -221,7 +232,7 @@ export function startApp(root: HTMLElement): void {
     if (!cell || !inBounds(grid, cell.x, cell.y)) return;
     if (!room.moveToken(selected, { x: cell.x, y: cell.y })) return;
     const moved = room.tokens().find((t) => t.id === selected);
-    if (moved && backend) {
+    if (moved && backend && !guest) {
       backend.pushDelta({ upsert: { [tokenKey(selected)]: encodeToken(moved) } });
     }
     draw();
@@ -231,7 +242,7 @@ export function startApp(root: HTMLElement): void {
     const result = resolveRoll({ sides: Number(sidesSel.value) });
     const delta = publishRoll(result, `offline-${++rollSeq}`);
     room.apply(delta);
-    if (backend) backend.pushDelta(delta);
+    if (backend && !guest) backend.pushDelta(delta);
     rollOut.textContent = frameForResult(result).faces
       .map((f) => f.label)
       .join(" ") + ` = ${result.total}`;
@@ -245,10 +256,11 @@ export function startApp(root: HTMLElement): void {
 }
 
 /**
- * Mirror local deltas into the hosted room (best-effort) and pull the host
- * snapshot wholesale. Deltas cross the bridge as JSON with BOTH fields
- * present (`JSON.stringify` drops `undefined`, while the Rust
- * `decode_delta` requires `upsert` + `remove`).
+ * Mirror local deltas into the hosted room (best-effort) and pull
+ * the host snapshot as a wholesale replace. Deltas cross the
+ * bridge as JSON with BOTH fields present (`JSON.stringify` drops
+ * `undefined`, while the Rust `decode_delta` requires `upsert` +
+ * `remove`).
  */
 function makeBackend(
   room: OfflineRoom,
@@ -277,9 +289,18 @@ function makeBackend(
       if (!doc || typeof doc.state !== "object" || doc.state === null) {
         throw new Error("snapshot ilegível");
       }
-      room.apply({ upsert: { ...doc.state } });
+      // Wholesale replace (fix round 1): upsert every snapshot entry
+      // and REMOVE local keys the host deleted — applying the
+      // snapshot upsert-only would leave stale tokens/keys
+      // accumulating locally forever.
+      const delta = replaceDelta(room.getState(), doc.state);
+      room.apply(delta);
       redraw();
-      setStatus(`Sincronizado: sala ${doc.room ?? "?"} (${Object.keys(doc.state).length} chaves).`);
+      setStatus(
+        `Sincronizado: sala ${doc.room ?? "?"} ` +
+          `(${Object.keys(doc.state).length} chaves, ` +
+          `${delta.remove?.length ?? 0} removidas).`,
+      );
     },
   };
 }

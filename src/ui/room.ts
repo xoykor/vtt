@@ -108,6 +108,11 @@ const VPN_HINT =
  * calls `invoke("join_room", { ip, port })` and parses the room-info JSON
  * reply (`{"version","room","port"}`). Failures always surface the addr and
  * the ZeroTier/Radmin/Hamachi VPN hint — same contract as `joinRoom`.
+ *
+ * NOTE (fix round 1): a guest holds no `HostState` — the backend
+ * `join_room` intentionally stores nothing, so `push_delta`/`get_snapshot`
+ * stay host-only. The lobby must show {@link guestJoinNotice} after a join
+ * and keep Sync/Push disabled on the guest path.
  */
 export async function joinVia(
   addr: string,
@@ -161,4 +166,31 @@ export async function joinVia(
     port: replyPort as number,
     version: PROTOCOL_VERSION,
   };
+}
+
+/**
+ * Wholesale-replace delta: applying it makes the local state exactly
+ * `next` — upserts every snapshot entry and removes local keys missing
+ * from it. Used by Sincronizar so host-deleted tokens/keys disappear
+ * locally instead of accumulating stale (fix round 1).
+ */
+export function replaceDelta(local: RoomState, next: RoomState): Delta {
+  const keep = new Set(Object.keys(next));
+  return {
+    upsert: { ...next },
+    remove: Object.keys(local).filter((k) => !keep.has(k)),
+  };
+}
+
+/**
+ * Lobby status after a guest join: the guest holds no backend state, so
+ * Sync/Push stay disabled — only the host mirrors deltas and snapshots.
+ * Hydrating from `join_room` alone is impossible (it returns only the
+ * room descriptor, no token state); live guest sync is later-task scope.
+ */
+export function guestJoinNotice(info: RoomInfo): string {
+  return (
+    `Na sala ${info.room} como convidado — ` +
+    `push/sync desabilitados (só o host sincroniza).`
+  );
 }
