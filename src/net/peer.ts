@@ -58,6 +58,7 @@ export function decodeHandshake(json: string): Handshake {
   if (typeof room !== "string" || room.length === 0) {
     throw new Error("missing field: room");
   }
+  if (typeof role !== "string") throw new Error("missing field: role");
   if (role !== "host" && role !== "guest") {
     throw new Error(`unknown role: ${String(role)}`);
   }

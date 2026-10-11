@@ -2,6 +2,8 @@ import { expect, test } from "vitest";
 import {
   applyDelta,
   createRoom,
+  decodeHandshake,
+  encodeHandshake,
   joinRoom,
   parseRoomAddr,
 } from "./peer";
@@ -36,4 +38,22 @@ test("applyDelta upserts and removes without mutating input", () => {
   });
   expect(next).toEqual({ b: "3" });
   expect(state).toEqual({ a: "1", b: "2" });
+});
+
+test("handshake roundtrips room with quotes and backslashes", () => {
+  const h = { version: "1.0", room: 'weird "room" \\ name', role: "guest" as const };
+  expect(decodeHandshake(encodeHandshake(h))).toEqual(h);
+});
+
+test("decodeHandshake rejects malformed, missing field, unknown role", () => {
+  expect(() => decodeHandshake("not json")).toThrow();
+  expect(() =>
+    decodeHandshake('{"version":"1.0","room":"r"}'),
+  ).toThrow(/missing field: role/);
+  expect(() =>
+    decodeHandshake('{"version":"1.0","room":"r","role":"admin"}'),
+  ).toThrow(/unknown role/);
+  expect(() =>
+    decodeHandshake('{"version":"0.9","room":"r","role":"guest"}'),
+  ).toThrow(/version mismatch/);
 });
