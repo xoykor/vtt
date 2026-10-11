@@ -8,6 +8,8 @@
 import {
   applyDelta,
   createRoom,
+  parseRoomAddr,
+  PROTOCOL_VERSION,
   type Delta,
   type RoomInfo,
   type RoomState,
@@ -88,5 +90,75 @@ export function createOfflineRoom(memberIds: string[]): OfflineRoom {
       state = applyDelta(state, { ...res.delta, upsert });
       return true;
     },
+  };
+}
+
+/** Tauri invoke bridge: `invoke(cmd, args)` exposed via `window.__TAURI__`. */
+export type InvokeFn = (
+  cmd: string,
+  args?: Record<string, unknown>,
+) => Promise<unknown>;
+
+const VPN_HINT =
+  "if peers cannot connect over the internet, host via a ZeroTier/Radmin/Hamachi VPN and share that IP";
+
+/**
+ * Join a room through the Tauri invoke bridge (Task 4, consumes the T2
+ * invoke handler + the T3 handshake): validates `addr` (`ip:port`) locally,
+ * calls `invoke("join_room", { ip, port })` and parses the room-info JSON
+ * reply (`{"version","room","port"}`). Failures always surface the addr and
+ * the ZeroTier/Radmin/Hamachi VPN hint — same contract as `joinRoom`.
+ */
+export async function joinVia(
+  addr: string,
+  invoke: InvokeFn,
+): Promise<RoomInfo> {
+  const { ip, port } = parseRoomAddr(addr);
+  let raw: unknown;
+  try {
+    raw = await invoke("join_room", { ip, port });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/ZeroTier|Radmin|Hamachi/.test(msg)) throw e;
+    throw new Error(`${msg} [join ${ip}:${port}] (${VPN_HINT})`);
+  }
+  if (typeof raw !== "string") {
+    throw new Error(
+      `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
+    );
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
+    );
+  }
+  if (typeof doc !== "object" || doc === null) {
+    throw new Error(
+      `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
+    );
+  }
+  const { version, room, port: replyPort } = doc as Record<string, unknown>;
+  if (version !== PROTOCOL_VERSION) {
+    throw new Error(
+      `version mismatch: peer=${String(version)} expected=${PROTOCOL_VERSION} [join ${ip}:${port}] (${VPN_HINT})`,
+    );
+  }
+  if (typeof room !== "string" || room.length === 0) {
+    throw new Error(
+      `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
+    );
+  }
+  if (!Number.isInteger(replyPort) || (replyPort as number) < 1) {
+    throw new Error(
+      `malformed room reply [join ${ip}:${port}] (${VPN_HINT})`,
+    );
+  }
+  return {
+    room,
+    port: replyPort as number,
+    version: PROTOCOL_VERSION,
   };
 }

@@ -23,11 +23,19 @@
 //! `.expect`/`.unwrap`/panics on any network or parse path, so callers get
 //! fail-closed `Err` (e.g. version mismatch) instead of a crash. Tests bind
 //! `127.0.0.1:0` (ephemeral port), never fixed ports.
+//!
+//! Rejection policy (no typed error frame): when the host rejects a
+//! handshake (stale version, malformed JSON) it returns `Err` and closes
+//! the connection without replying. The guest then observes EOF on its
+//! pending read (`tcp read failed: ...`) — EOF-after-handshake IS the
+//! rejection signal. Both sides surface `Err`, never a hang: accept,
+//! connect and handshake reads are all capped by [`HANDSHAKE_TIMEOUT`].
 
 use super::{Delta, Handshake, Role, RoomInfo, PROTOCOL_VERSION};
 use super::{decode_handshake, encode_handshake, handshake};
 use super::super::save::{GameSave, export_json, import_json};
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -36,17 +44,31 @@ use tokio::net::{TcpListener, TcpStream};
 /// anything larger is rejected fail-closed instead of buffering.
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
+/// Fail-closed cap for accept/connect/handshake reads: a peer that dials
+/// and never speaks (or never answers) cannot park the server loop forever.
+pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Accept exactly one connection, read one handshake frame, version-gate
 /// it, reply with the room frame and return the accepted handshake.
 ///
 /// The room reply echoes the guest's room bound to this listener's actual
-/// port. Stale versions, malformed JSON and oversized frames yield `Err`.
+/// port. Stale versions, malformed JSON and oversized frames yield `Err`
+/// and the connection closes with NO error frame — the guest's pending
+/// read fails with EOF (`tcp read failed`), which is the rejection signal.
+/// Accept and the handshake read are capped by [`HANDSHAKE_TIMEOUT`] so a
+/// silent peer cannot block the server loop (cancel via dropping the
+/// returned future / shutdown handle in later tasks).
 pub async fn serve_once(listener: TcpListener) -> Result<Handshake, String> {
-    let (mut stream, _peer) = listener
-        .accept()
+    let (mut stream, _peer) = tokio::time::timeout(
+        HANDSHAKE_TIMEOUT,
+        listener.accept(),
+    )
+    .await
+    .map_err(|_| "tcp accept timed out after 10s".to_string())?
+    .map_err(|e| format!("tcp accept failed: {e}"))?;
+    let frame = tokio::time::timeout(HANDSHAKE_TIMEOUT, recv_frame(&mut stream))
         .await
-        .map_err(|e| format!("tcp accept failed: {e}"))?;
-    let frame = recv_frame(&mut stream).await?;
+        .map_err(|_| "tcp handshake timed out after 10s".to_string())??;
     let text = std::str::from_utf8(&frame)
         .map_err(|_| "malformed handshake json: invalid utf-8".to_string())?;
     let hs = decode_handshake(text)?;
@@ -75,16 +97,25 @@ pub async fn connect_handshake(addr: SocketAddr) -> Result<RoomInfo, String> {
 }
 
 /// Dial `addr`, send `guest` as the handshake frame and return the host's
-/// validated room reply. Version mismatches (either side) yield `Err`.
+/// validated room reply. Version mismatches (either side) yield `Err`: a
+/// rejecting host closes without a reply frame, so this surfaces as an
+/// EOF read failure — EOF-after-handshake is the rejection. Connect and
+/// the reply read are capped by [`HANDSHAKE_TIMEOUT`].
 pub async fn connect_with_handshake(
     addr: SocketAddr,
     guest: &Handshake,
 ) -> Result<RoomInfo, String> {
-    let mut stream = TcpStream::connect(addr)
-        .await
-        .map_err(|e| format!("tcp connect failed [{addr}]: {e}"))?;
+    let mut stream = tokio::time::timeout(
+        HANDSHAKE_TIMEOUT,
+        TcpStream::connect(addr),
+    )
+    .await
+    .map_err(|_| format!("tcp connect timed out after 10s [{addr}]"))?
+    .map_err(|e| format!("tcp connect failed [{addr}]: {e}"))?;
     send_frame(&mut stream, encode_handshake(guest).as_bytes()).await?;
-    let frame = recv_frame(&mut stream).await?;
+    let frame = tokio::time::timeout(HANDSHAKE_TIMEOUT, recv_frame(&mut stream))
+        .await
+        .map_err(|_| format!("tcp handshake timed out after 10s [{addr}]"))??;
     let text = std::str::from_utf8(&frame)
         .map_err(|_| "malformed room json: invalid utf-8".to_string())?;
     decode_room_info(text)

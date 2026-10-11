@@ -1,11 +1,15 @@
-// Playable offline shell: local room + canvas map + sheet panel +
-// dice roller. No network. Consumes the ready modules only:
+// Playable shell: local room + canvas map + sheet panel + dice roller.
+// Consumes the ready modules:
 // - net/peer (RoomState via OfflineRoom.apply)
 // - map/grid + map/fog + map/light (geometry for the view)
 // - map/tokens (via OfflineRoom)
 // - sheet/srd + sheet/types (sheet panel encode/decode)
 // - dice/roller + dice/scene (host-resolved rolls, rendered result)
-// Task 4 bootstraps this into the webview via startApp(root).
+// Task 4 bootstraps this into the webview via startApp(root): inside a
+// Tauri window (`window.__TAURI__` present) host/join/sync go through the
+// real invoke bridge (`create_room`, `join_room`, `push_delta`,
+// `get_snapshot` in src-tauri/src/commands.rs); in a plain browser the
+// same shell runs fully offline with no invoke calls.
 
 import { createGrid, inBounds } from "./map/grid";
 import { createFog, revealFog } from "./map/fog";
@@ -14,13 +18,55 @@ import { decodeSheet, encodeSheet } from "./sheet/srd";
 import type { Sheet } from "./sheet/types";
 import { publishRoll, resolveRoll } from "./dice/roller";
 import { frameForResult } from "./dice/scene";
-import { createOfflineRoom } from "./ui/room";
+import { encodeToken } from "./map/tokens";
+import type { Delta } from "./net/peer";
+import {
+  createOfflineRoom,
+  joinVia,
+  tokenKey,
+  type InvokeFn,
+  type OfflineRoom,
+} from "./ui/room";
 import { eventToCell, renderMapView } from "./ui/mapview";
 
 const MEMBERS = ["dm", "p1", "p2", "p3", "p4", "p5"];
 const SIDES = [2, 4, 6, 8, 10, 12, 20, 100];
 
-/** Bootstrap the offline shell into `root` (Task 4 webview entry). */
+/** True inside the Tauri webview (invoke bridge available). */
+function isTauri(): boolean {
+  try {
+    return (
+      typeof window !== "undefined" &&
+      (window as unknown as { __TAURI__?: unknown }).__TAURI__ !== undefined
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Raw Tauri invoke without the `@tauri-apps/api` npm dep: reads the
+ * `window.__TAURI__` bridge installed by the webview (Tauri 2 exposes
+ * `core.invoke`; older shims expose a top-level `invoke`).
+ */
+function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
+  const scope = (window as unknown as {
+    __TAURI__?: { core?: { invoke?: InvokeFn }; invoke?: InvokeFn };
+  }).__TAURI__;
+  const fn = scope?.core?.invoke ?? scope?.invoke;
+  if (!fn) throw new Error("tauri invoke unavailable (browser offline)");
+  return fn(cmd, args);
+}
+
+const invokeViaBridge: InvokeFn = (cmd, args) => tauriInvoke(cmd, args);
+
+/** Host-side backend: pushes local deltas, pulls the host snapshot. */
+interface Backend {
+  pushDelta(delta: Delta): void;
+  pullSnapshot(): Promise<void>;
+}
+
+/** Bootstrap the shell into `root` (Task 4 webview entry). */
 export function startApp(root: HTMLElement): void {
   const room = createOfflineRoom(MEMBERS);
   const grid = createGrid(10, 8);
@@ -38,7 +84,74 @@ export function startApp(root: HTMLElement): void {
 
   root.innerHTML = "";
   const title = document.createElement("h1");
-  title.textContent = "VTT — Sala offline";
+  title.textContent = isTauri() ? "VTT — Sala" : "VTT — Sala offline";
+  root.append(title);
+
+  // Task 4 lobby: real host + real join via the Tauri window. The browser
+  // path skips this entirely (stays offline, no invoke calls).
+  let backend: Backend | null = null;
+  if (isTauri()) {
+    const status = document.createElement("div");
+    status.textContent = "Tauri: invoke pronto.";
+    const lobby = document.createElement("div");
+    lobby.style.display = "flex";
+    lobby.style.gap = "8px";
+    lobby.style.marginBottom = "12px";
+
+    const portInput = document.createElement("input");
+    portInput.value = "7000";
+    portInput.style.width = "6em";
+    const hostBtn = document.createElement("button");
+    hostBtn.textContent = "Hospedar sala";
+    hostBtn.addEventListener("click", () => {
+      tauriInvoke("create_room", { port: Number(portInput.value) })
+        .then((reply) => {
+          status.textContent = `Sala hospedada: ${String(reply)}`;
+        })
+        .catch((e: Error) => {
+          status.textContent = `Hospedar falhou: ${e.message}`;
+        });
+    });
+
+    const addrInput = document.createElement("input");
+    addrInput.value = "127.0.0.1:7000";
+    addrInput.style.width = "12em";
+    const joinBtn = document.createElement("button");
+    joinBtn.textContent = "Entrar em sala";
+    joinBtn.addEventListener("click", () => {
+      joinVia(addrInput.value, invokeViaBridge)
+        .then((info) => {
+          status.textContent = `Na sala ${info.room} (porta ${info.port}).`;
+        })
+        .catch((e: Error) => {
+          status.textContent = `Entrar falhou: ${e.message}`;
+        });
+    });
+
+    const syncBtn = document.createElement("button");
+    syncBtn.textContent = "Sincronizar";
+    syncBtn.addEventListener("click", () => {
+      if (backend) {
+        backend.pullSnapshot().catch((e: Error) => {
+          status.textContent = `Sincronizar falhou: ${e.message}`;
+        });
+      } else {
+        status.textContent = "Nada para sincronizar (hospede primeiro).";
+      }
+    });
+
+    lobby.append(portInput, hostBtn, addrInput, joinBtn, syncBtn);
+    root.append(lobby, status);
+
+    // From here on the local shell mirrors into the hosted room:
+    // every local delta is pushed best-effort, and Sincronizar pulls the
+    // host snapshot wholesale (same remove-wins path as the guest).
+    const setStatus = (msg: string): void => {
+      status.textContent = msg;
+    };
+    backend = makeBackend(room, setStatus, draw);
+  }
+
   const wrap = document.createElement("div");
   wrap.style.display = "flex";
   wrap.style.gap = "16px";
@@ -84,6 +197,8 @@ export function startApp(root: HTMLElement): void {
     });
   }
 
+  // `draw` is hoisted by function declaration, so the backend above closes
+  // over it safely.
   function showSheet(): void {
     const sheet = sheets.get(selected);
     sheetBox.textContent = sheet
@@ -104,12 +219,19 @@ export function startApp(root: HTMLElement): void {
   canvas.addEventListener("click", (ev) => {
     const cell = eventToCell(canvas, ev.clientX, ev.clientY);
     if (!cell || !inBounds(grid, cell.x, cell.y)) return;
-    if (room.moveToken(selected, { x: cell.x, y: cell.y })) draw();
+    if (!room.moveToken(selected, { x: cell.x, y: cell.y })) return;
+    const moved = room.tokens().find((t) => t.id === selected);
+    if (moved && backend) {
+      backend.pushDelta({ upsert: { [tokenKey(selected)]: encodeToken(moved) } });
+    }
+    draw();
   });
 
   rollBtn.addEventListener("click", () => {
     const result = resolveRoll({ sides: Number(sidesSel.value) });
-    room.apply(publishRoll(result, `offline-${++rollSeq}`));
+    const delta = publishRoll(result, `offline-${++rollSeq}`);
+    room.apply(delta);
+    if (backend) backend.pushDelta(delta);
     rollOut.textContent = frameForResult(result).faces
       .map((f) => f.label)
       .join(" ") + ` = ${result.total}`;
@@ -119,5 +241,45 @@ export function startApp(root: HTMLElement): void {
   draw();
   side.append(sheetTitle, tokenList, sheetBox, diceTitle, sidesSel, rollBtn, rollOut);
   wrap.append(canvas, side);
-  root.append(title, wrap);
+  root.append(wrap);
+}
+
+/**
+ * Mirror local deltas into the hosted room (best-effort) and pull the host
+ * snapshot wholesale. Deltas cross the bridge as JSON with BOTH fields
+ * present (`JSON.stringify` drops `undefined`, while the Rust
+ * `decode_delta` requires `upsert` + `remove`).
+ */
+function makeBackend(
+  room: OfflineRoom,
+  setStatus: (msg: string) => void,
+  redraw: () => void,
+): Backend {
+  return {
+    pushDelta(delta: Delta): void {
+      const wire = JSON.stringify({
+        upsert: delta.upsert ?? {},
+        remove: delta.remove ?? [],
+      });
+      tauriInvoke("push_delta", { delta: wire })
+        .then(() => undefined)
+        .catch((e: Error) => {
+          setStatus(`push_delta falhou: ${e.message}`);
+        });
+    },
+    async pullSnapshot(): Promise<void> {
+      const raw = await tauriInvoke("get_snapshot");
+      if (typeof raw !== "string") throw new Error("snapshot ilegível");
+      const doc = JSON.parse(raw) as {
+        state?: Record<string, string>;
+        room?: string;
+      };
+      if (!doc || typeof doc.state !== "object" || doc.state === null) {
+        throw new Error("snapshot ilegível");
+      }
+      room.apply({ upsert: { ...doc.state } });
+      redraw();
+      setStatus(`Sincronizado: sala ${doc.room ?? "?"} (${Object.keys(doc.state).length} chaves).`);
+    },
+  };
 }

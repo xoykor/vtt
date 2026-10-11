@@ -10,6 +10,8 @@
 #[allow(dead_code, unused_imports)]
 pub mod assets;
 #[allow(dead_code, unused_imports)]
+pub mod commands;
+#[allow(dead_code, unused_imports)]
 pub mod net;
 #[allow(dead_code, unused_imports)]
 pub mod save;
@@ -30,7 +32,14 @@ fn greet(name: &str) -> String {
 #[cfg(feature = "tauri-app")]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet])
+        .manage(commands::HostState::default())
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            commands::create_room,
+            commands::join_room,
+            commands::push_delta,
+            commands::get_snapshot
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -3,17 +3,17 @@
 //! Binds `127.0.0.1:0` (ephemeral port, no fixed ports). The host accepts
 //! one connection, validates the handshake version and replies with
 //! `RoomInfo`; stale versions are rejected with `Err`, never panicked.
+//!
+//! Version-mismatch policy: the host closes without an error frame, so the
+//! guest observes EOF (`tcp read failed`) — EOF-after-handshake IS the
+//! rejection; both sides return `Err`.
 
-#[allow(dead_code)]
-#[path = "../src/lib.rs"]
-mod main;
-
-use main::net::tcp::{
+use vtt_tauri::net::tcp::{
     connect_handshake, connect_with_handshake, recv_delta, recv_snapshot,
     send_delta, send_snapshot, serve_once,
 };
-use main::net::{Delta, Handshake, RoomInfo, Role, PROTOCOL_VERSION};
-use main::save::{GameSave, SAVE_VERSION, snapshot};
+use vtt_tauri::net::{Delta, Handshake, RoomInfo, Role, PROTOCOL_VERSION};
+use vtt_tauri::save::{GameSave, SAVE_VERSION, snapshot};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
@@ -115,7 +115,7 @@ async fn snapshot_and_delta_travel_over_tcp() {
     assert_eq!(got_save, save);
     assert_eq!(got_delta, delta);
     // Guest applies the delta on top of the snapshot: remove-wins.
-    let next = main::net::apply_delta(&got_save.state, &got_delta);
+    let next = vtt_tauri::net::apply_delta(&got_save.state, &got_delta);
     assert_eq!(next.get("p1"), Some(&"v1".to_string()));
     assert!(!next.contains_key("dm"));
 }
