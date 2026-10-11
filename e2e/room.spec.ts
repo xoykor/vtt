@@ -15,8 +15,8 @@ import { createToken, decodeToken, encodeToken } from "../src/map/tokens";
 // sem browser — o transporte real (TCP ordenado para estado, UDP para
 // cursor) entra quando os sockets Rust landarem. O que este spec prova:
 // o guest derruba o estado local, pede o snapshot cheio ao host e o
-// aplica por substituição integral (`applySnapshot`), nunca por merge
-// de deltas — logo 6 peças continuam 6, sem duplicatas.
+// aplica pelo caminho real de produção (`applyDelta` + `decodeToken`,
+// nunca merge manual) — logo 6 peças continuam 6, sem duplicatas.
 //
 // Peças de teste (mesa 1 mestre + 5 jogadores): "dm" + p1..p5.
 //
@@ -40,47 +40,44 @@ function sixTokenState(): RoomState {
   return state;
 }
 
-/** Vista do guest: aplica snapshots por substituição integral. */
-class Room {
-  state: RoomState = {};
-
-  constructor(public readonly roomId: string) {}
-
-  tokenCount(): number {
-    return Object.keys(this.state).length;
-  }
-
-  tokenIds(): string[] {
-    return Object.keys(this.state).sort();
-  }
-
-  /** Rejoin: o snapshot substitui o estado local (nunca merge). */
-  applySnapshot(snapshot: RoomState): void {
-    this.state = { ...snapshot };
-  }
+/** Caminho de produção do guest: aplica o snapshot via `applyDelta` sobre estado vazio (substituição integral, nunca merge). */
+function guestApplySnapshot(snapshot: RoomState): RoomState {
+  return applyDelta({}, { upsert: { ...snapshot } });
 }
 
-let room: Room;
+/** Valida cada entrada pelo caminho real (`decodeToken`) e retorna os ids ordenados. */
+function decodedIds(state: RoomState): string[] {
+  const ids = Object.keys(state).sort();
+  for (const id of ids) {
+    expect(decodeToken(state[id]).id).toBe(id);
+  }
+  return ids;
+}
+
+let snapshot: RoomState;
+let rejoined: RoomState;
 
 test.beforeEach(() => {
   const host = createRoom(PORT);
   const guest = joinRoom("127.0.0.1", PORT);
   expect(guest.role).toBe("guest");
+  expect(host.room).toBe(`room-${PORT}`);
   // Host semeia 6 tokens e difunde o snapshot cheio via TCP ordenado.
-  const snapshot: RoomState = applyDelta({}, { upsert: sixTokenState() });
+  snapshot = applyDelta({}, { upsert: sixTokenState() });
   expect(Object.keys(snapshot)).toHaveLength(6);
-  // Guest cai, reconecta com o mesmo id e recebe o snapshot de novo.
-  room = new Room(host.room);
-  room.applySnapshot(snapshot);
-  room.applySnapshot({ ...snapshot });
+  // Guest cai, reconecta com o mesmo id e recebe o snapshot de novo
+  // pelo caminho de produção (substituição integral via applyDelta).
+  guestApplySnapshot(snapshot);
+  rejoined = guestApplySnapshot(snapshot);
 });
 
 test("rejoin gets snapshot without dup tokens", async () => {
-  await expect(room.tokenCount()).toBe(6);
+  expect(Object.keys(rejoined)).toHaveLength(6);
+  expect(decodedIds(rejoined)).toHaveLength(6);
 });
 
 test("rejoin keeps unique token ids", async () => {
-  await expect(room.tokenIds()).toEqual(["dm", "p1", "p2", "p3", "p4", "p5"]);
+  expect(decodedIds(rejoined)).toEqual(["dm", "p1", "p2", "p3", "p4", "p5"]);
 });
 
 // Cross-boundary golden (review Task 7 round 1): este fixture é gerado
@@ -113,6 +110,6 @@ test("rust golden fixture restores 6 tokens without dups", async () => {
     expect(decodeToken(guest[id]).id).toBe(id);
   }
   // Rejoin: segundo snapshot substitui, nunca duplica.
-  const rejoined: RoomState = { ...doc.state };
-  expect(Object.keys(rejoined)).toHaveLength(6);
+  const rejoinedGolden: RoomState = guestApplySnapshot(doc.state);
+  expect(Object.keys(rejoinedGolden)).toHaveLength(6);
 });

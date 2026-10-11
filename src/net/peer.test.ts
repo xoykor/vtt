@@ -40,6 +40,22 @@ test("applyDelta upserts and removes without mutating input", () => {
   expect(state).toEqual({ a: "1", b: "2" });
 });
 
+test("applyDelta is remove-wins on keys present in both upsert and remove", () => {
+  const next = applyDelta({ a: "1" }, { upsert: { a: "2" }, remove: ["a"] });
+  expect("a" in next).toBe(false);
+});
+
+test("joinRoom/parseRoomAddr errors include ip:port and suggest a VPN", () => {
+  expect(() => joinRoom("999.999.1.1", 7000)).toThrow(/999\.999\.1\.1/);
+  expect(() => joinRoom("999.999.1.1", 7000)).toThrow(/ZeroTier/);
+  expect(() => joinRoom("999.999.1.1", 7000)).toThrow(/127|7000|999/);
+  expect(() => parseRoomAddr("999.999.1.1:7000")).toThrow(/ZeroTier/);
+  expect(() => parseRoomAddr("999.999.1.1:7000")).toThrow(/999\.999\.1\.1/);
+  expect(() => parseRoomAddr("not-an-addr")).toThrow(/ZeroTier/);
+  expect(() => joinRoom("127.0.0.1", 0)).toThrow(/invalid port/);
+  expect(() => joinRoom("127.0.0.1", 0)).toThrow(/ZeroTier/);
+});
+
 test("handshake roundtrips room with quotes and backslashes", () => {
   const h = { version: "1.0", room: 'weird "room" \\ name', role: "guest" as const };
   expect(decodeHandshake(encodeHandshake(h))).toEqual(h);

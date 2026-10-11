@@ -5,10 +5,13 @@
   "description": "VTT Tauri P2P — mesa D&D 5e P2P (Win/Linux/Mac/Android APK, sem iOS)",
   "scripts": {
     "test:unit": "vitest run",
-    "test:e2e": "playwright test e2e/room.spec.ts"
+    "test:e2e": "playwright test e2e/room.spec.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
     "vitest": "^5.0.3"
   }
 }

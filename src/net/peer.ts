@@ -70,35 +70,52 @@ export interface RoomAddr {
   port: number;
 }
 
+const VPN_HINT =
+  "if peers cannot connect over the internet, host via a ZeroTier/Radmin/Hamachi VPN and share that IP";
+
 function checkIp(ip: string): void {
   const parts = ip.split(".");
-  if (parts.length !== 4) throw new Error(`invalid ip: ${ip}`);
+  if (parts.length !== 4) throw new Error(`invalid ip: ${ip} (${VPN_HINT})`);
   for (const part of parts) {
-    if (!/^\d+$/.test(part)) throw new Error(`invalid ip: ${ip}`);
+    if (!/^\d+$/.test(part)) throw new Error(`invalid ip: ${ip} (${VPN_HINT})`);
     if (part.length > 1 && part.startsWith("0")) {
-      throw new Error(`invalid ip: ${ip}`);
+      throw new Error(`invalid ip: ${ip} (${VPN_HINT})`);
     }
     const n = Number(part);
-    if (n < 0 || n > 255) throw new Error(`invalid ip: ${ip}`);
+    if (n < 0 || n > 255) throw new Error(`invalid ip: ${ip} (${VPN_HINT})`);
   }
 }
 
-function checkPort(port: number): void {
+function checkPort(port: number, ctx?: string): void {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`invalid port: ${port}`);
+    throw new Error(
+      `invalid port: ${port}${ctx ? ` [join ${ctx}]` : ""} (${VPN_HINT})`,
+    );
   }
 }
 
-/** Parse `ip:port` into a validated room address. */
+/** Parse `ip:port` into a validated room address. Errors include the addr and suggest a ZeroTier/Radmin/Hamachi VPN. */
 export function parseRoomAddr(addr: string): RoomAddr {
   const sep = addr.lastIndexOf(":");
   if (sep <= 0 || sep === addr.length - 1) {
-    throw new Error(`invalid room addr: ${addr}`);
+    throw new Error(`invalid room addr: ${addr} (${VPN_HINT})`);
   }
   const ip = addr.slice(0, sep);
   const port = Number(addr.slice(sep + 1));
-  checkIp(ip);
-  checkPort(port);
+  try {
+    checkIp(ip);
+  } catch (e) {
+    throw new Error(
+      `${e instanceof Error ? e.message : String(e)} [addr ${addr}]`,
+    );
+  }
+  try {
+    checkPort(port);
+  } catch (e) {
+    throw new Error(
+      `${e instanceof Error ? e.message : String(e)} [addr ${addr}]`,
+    );
+  }
   return { ip, port };
 }
 
@@ -120,10 +137,16 @@ export function createRoom(port: number): RoomInfo {
   return { room: `room-${port}`, port, version: PROTOCOL_VERSION };
 }
 
-/** Join the room hosted at `ip:port` as guest. */
+/** Join the room hosted at `ip:port` as guest. Errors include the `ip:port` and suggest a ZeroTier/Radmin/Hamachi VPN when the address is invalid or unreachable. */
 export function joinRoom(ip: string, port: number): Peer {
-  checkIp(ip);
-  checkPort(port);
+  try {
+    checkIp(ip);
+  } catch (e) {
+    throw new Error(
+      `${e instanceof Error ? e.message : String(e)} [join ${ip}:${port}]`,
+    );
+  }
+  checkPort(port, `${ip}:${port}`);
   return { ip, port, role: "guest" };
 }
 
@@ -134,7 +157,7 @@ export interface Delta {
   remove?: string[];
 }
 
-/** Pure state transition: returns the state with `delta` applied. */
+/** Pure state transition: returns the state with `delta` applied. Remove-wins: upserts apply first, then removes, so a key in both is deleted. NOTE: `Delta` here uses optional `upsert`/`remove` while the Rust mirror (`src-tauri/src/net/mod.rs`) requires both vecs; the future FFI bridge must adapt between the two shapes. */
 export function applyDelta(state: RoomState, delta: Delta): RoomState {
   const next: RoomState = { ...state };
   if (delta.upsert) {
