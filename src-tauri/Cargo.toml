@@ -20,6 +20,7 @@ tauri-app = ["dep:tauri", "dep:tauri-build"]
 
 [dependencies]
 tauri = { version = "2", optional = true }
+tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros", "io-util", "time"] }
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true }

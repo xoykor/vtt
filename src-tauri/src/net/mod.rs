@@ -6,6 +6,7 @@
 //! updates over [`Channel::UdpCursor`].
 
 pub mod proto;
+pub mod tcp;
 
 pub use proto::{
     Channel, Handshake, MDNS_SERVICE, PROTOCOL_VERSION,
