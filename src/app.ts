@@ -86,7 +86,9 @@ export function syncSheetsFromRoom(room: OfflineRoom, sheets: Map<string, import
       ? key.slice(PUBLIC_SHEET_PREFIX.length)
       : key.slice("sheet:".length);
     if (id.length === 0) continue;
-    if (key.startsWith(PUBLIC_SHEET_PREFIX) && sheets.has(id)) continue;
+    // Chave normal no snapshot vence; sem ela, a pública legada atualiza
+    // (nunca consultar o mapa local stale aqui).
+    if (key.startsWith(PUBLIC_SHEET_PREFIX) && room.getState()[sheetKey(id)] !== undefined) continue;
     try {
       sheets.set(id, decodeSheet(value));
     } catch {

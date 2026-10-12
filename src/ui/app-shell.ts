@@ -229,7 +229,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       tokenBar.setSelected(selected, projected);
       return;
     }
-    renderSheetPanel(sheetPanel, sheet, {
+    renderSheetPanel(sheetPanel, projected, {
       onChange: (updated) => {
         const prev = sheets.get(selected);
         const sanitized = sanitizeSheetWrite(prev ?? null, updated, {
@@ -255,7 +255,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
         diceView?.show(frameForResult(result));
       },
     });
-    tokenBar.setSelected(selected, sheet);
+    tokenBar.setSelected(selected, projected);
   }
 
   canvas.addEventListener("click", (ev) => {
