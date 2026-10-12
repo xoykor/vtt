@@ -27,6 +27,8 @@ export interface LibraryView {
   el: HTMLElement;
   /** Re-render the list (used after edit/delete). */
   refresh(sheets: Sheet[]): void;
+  /** Write a message into the status line (host/join errors). */
+  setStatus(message: string): void;
 }
 
 const DEFAULT_JOIN_ADDRESS = "127.0.0.1:7000";
@@ -104,6 +106,10 @@ export function createCharacterLibrary(
   toolbar.appendChild(backBtn);
   card.appendChild(toolbar);
 
+  const status = document.createElement("div");
+  status.className = "library-status";
+  card.appendChild(status);
+
   const list = document.createElement("div");
   list.className = "library-list";
   card.appendChild(list);
@@ -156,5 +162,11 @@ export function createCharacterLibrary(
   }
 
   render(initial);
-  return { el, refresh: render };
+  return {
+    el,
+    refresh: render,
+    setStatus(message: string): void {
+      status.textContent = message;
+    },
+  };
 }

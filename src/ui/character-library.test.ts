@@ -110,8 +110,23 @@ test("refresh re-renders the list (used after edit/delete)", () => {
   }
 });
 
-test("library never mounts the map grid or table", () => {
+test("status line surfaces host/join errors inside the library", () => {
   const h = handlers();
+  const view = createCharacterLibrary([sheet("a", "Borin")], h);
+  document.body.appendChild(view.el);
+  try {
+    const status = view.el.querySelector(".library-status");
+    expect(status).not.toBeNull();
+    view.setStatus("Hospedar falhou: offline");
+    expect(view.el.querySelector(".library-status")?.textContent).toBe(
+      "Hospedar falhou: offline",
+    );
+  } finally {
+    view.el.remove();
+  }
+});
+
+test("library never mounts the map grid or table", () => {  const h = handlers();
   const view = createCharacterLibrary([sheet("a", "Borin")], h);
   document.body.appendChild(view.el);
   try {

@@ -179,6 +179,22 @@ test("viewing a sheet opens details without the grid", () => {
   }
 });
 
+test("hosting from the library without Tauri shows guidance in the library", () => {
+  const storage = memStorage();
+  const root = document.createElement("div");
+  document.body.appendChild(root);
+  try {
+    startApp(root, { storage });
+    saveHero(root, "Borin");
+    root.querySelector<HTMLButtonElement>(".library-host")!.click();
+    expect(root.querySelector(".library-status")?.textContent).toContain("Tauri");
+    // Still no table: the grid only mounts inside a real session.
+    expect(root.querySelector(".app-content")).toBeNull();
+  } finally {
+    root.remove();
+  }
+});
+
 test("hosting with a library character opens the table", async () => {
   (window as unknown as Record<string, unknown>).__TAURI__ = {
     core: {
