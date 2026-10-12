@@ -55,6 +55,15 @@ function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<unkno
 const invokeViaBridge: InvokeFn = (cmd, args) => tauriInvoke(cmd, args);
 
 /**
+ * Shown when "Hospedar" is clicked outside the Tauri app (plain
+ * browser): hosting needs the Rust backend, so there is no room to
+ * create here — point at `npm run tauri dev` / the installer instead
+ * of letting the `tauriInvoke` rejection escape as a bare error.
+ */
+export const HOST_UNAVAILABLE_MESSAGE =
+  "Hospedar requer o app Tauri — rode `npm run tauri dev` ou use o instalador";
+
+/**
  * Mirror local deltas into the hosted room (best-effort) and pull
  * the host snapshot as a wholesale replace. Deltas cross the
  * bridge as JSON with BOTH fields present (`JSON.stringify` drops
@@ -116,7 +125,7 @@ export function startApp(root: HTMLElement): void {
   const menu = createMenu(root, {
     onHost: () => {
       if (!isTauri()) {
-        menu.setStatus("Modo offline: hospedagem requer Tauri.", "error");
+        menu.setStatus(HOST_UNAVAILABLE_MESSAGE, "error");
         return;
       }
       menu.setStatus("Criando sala...");
