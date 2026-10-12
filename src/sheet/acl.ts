@@ -81,10 +81,11 @@ export function filterSheetForPeer(
 }
 
 /**
- * Travamento de escrita (fail-closed): GM escreve ACL livremente;
- * não-GM tem `viewers`/`controllers`/`public*` ignorados.
- * Criação (`prev === null`) por player força `controllers=[author]`.
- * Campos de dados (nome/hp/...) passam sempre; só ACL é travada.
+ * Travamento de escrita (fail-closed): GM escreve ACL + gmNotes
+ * livremente; não-GM tem `viewers`/`controllers`/`public*`/`gmNotes`
+ * ignorados. Criação (`prev === null`) por player força
+ * `controllers=[author]`. Campos de dados (nome/hp/...) passam sempre;
+ * só ACL + gmNotes são travadas.
  */
 export function sanitizeSheetWrite(
   prev: Sheet | null,
@@ -101,9 +102,11 @@ export function sanitizeSheetWrite(
       out.publicView = false;
       out.publicControl = false;
     }
+    // Player nunca escreve gmNotes (só GM).
+    delete out.gmNotes;
     return out;
   }
-  // Edição: preserva ACL existente (player não re-compartilha).
+  // Edição: preserva ACL + gmNotes existentes (player não re-compartilha).
   if (prev.controllers !== undefined) out.controllers = [...prev.controllers];
   else delete out.controllers;
   if (prev.viewers !== undefined) out.viewers = [...prev.viewers];
@@ -112,6 +115,8 @@ export function sanitizeSheetWrite(
   else delete out.publicView;
   if (prev.publicControl !== undefined) out.publicControl = prev.publicControl;
   else delete out.publicControl;
+  if (prev.gmNotes !== undefined) out.gmNotes = prev.gmNotes;
+  else delete out.gmNotes;
   return out;
 }
 

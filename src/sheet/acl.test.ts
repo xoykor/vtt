@@ -92,6 +92,22 @@ test("GM escreve ACL livremente", () => {
   expect(stored.publicView).toBe(true);
 });
 
+test("gmNotes escrita por não-GM é ignorada", () => {
+  const prev = baseSheet({ controllers: ["peer-a"], gmNotes: "segredo" });
+  const attempt = baseSheet({ controllers: ["peer-a"], gmNotes: "hack" });
+  const stored = sanitizeSheetWrite(prev, attempt, {
+    peerId: "peer-b",
+    isGM: false,
+  });
+  expect(stored.gmNotes).toBe("segredo");
+  const created = sanitizeSheetWrite(
+    null,
+    baseSheet({ gmNotes: "hack" }),
+    { peerId: "peer-b", isGM: false },
+  );
+  expect(created.gmNotes).toBeUndefined();
+});
+
 test("viewers só vêem metadados (nome/avatar/bio)", () => {
   const sheet = baseSheet({
     name: "Borin",

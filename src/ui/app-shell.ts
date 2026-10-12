@@ -1,7 +1,9 @@
 // Table shell (the view behind the menu): canvas map with fog and
-// light, the token bar, the character sheet panel and the dice roller.
-// Extracted from src/app.ts so `startApp` only orchestrates the menu,
-// the room and the host backend.
+// light, the sheet bar (sem slots fixos), the character sheet panel
+// and the dice roller. Sessão sem seletor de jogador: a barra lista
+// fichas visíveis (GM=todas, player=próprias+compartilhadas) e
+// `session.character` (`sheetId|null`) é a ficha padrão p/ falar/rolar.
+// Tokens com `represents` herdam controle da ficha.
 
 import "../styles/sheet.css";
 import { createFog, revealFog } from "../map/fog";
@@ -11,7 +13,8 @@ import { encodeToken } from "../map/tokens";
 import type { Delta } from "../net/peer";
 import { publishRoll, resolveRoll } from "../dice/roller";
 import { frameForResult } from "../dice/scene";
-import { decodeSheet, encodeSheet } from "../sheet/srd";
+import { canControlToken, canView, sanitizeSheetWrite } from "../sheet/acl";
+import { encodeSheet } from "../sheet/srd";
 import type { Sheet } from "../sheet/types";
 import { sheetKey } from "../sheet/visibility";
 import { tokenKey, type OfflineRoom } from "./room";
@@ -19,7 +22,8 @@ import { eventToCell, renderMapView } from "./mapview";
 import { renderSheetPanel } from "./sheet-panel";
 import { createDicePanel } from "./dice-panel";
 import { createThreeDiceView, type ThreeDiceView } from "../dice/three-scene";
-import { createTokenBar, MEMBERS } from "./token-bar";
+import { createTokenBar } from "./token-bar";
+import type { SessionPeer } from "../session/peers";
 
 /** Host-side backend: pushes local deltas, pulls the host snapshot. */
 export interface Backend {
@@ -32,18 +36,28 @@ export interface Session {
   backend: Backend | null;
   guest: boolean;
   rollSeq: number;
-  /** Local member id (`dm`, `p1`..`p5`); empty when unknown (guest before join). */
+  /** Legado: id do slot (`dm`,`p1`..); migração → `peerId`. */
   userId: string;
+  /** Peer atual (hash + nome auto-declarado). */
+  peerId: string;
+  /** Nome auto-declarado do peer atual. */
+  displayName: string;
+  /** True quando hospeda (GM inicial). */
+  isGM: boolean;
+  /** Ficha padrão p/ falar/rolar (`sheetId|null`). */
+  character: string | null;
+  /** Peers da sessão (sem slots, sem limite). */
+  peers: SessionPeer[];
 }
 
 export interface AppShellDeps {
   /** Root element the shell renders into. */
   root: HTMLElement;
-  /** Local room holding the token/member state. */
+  /** Local room holding the token/sheet/peer state. */
   room: OfflineRoom;
   /** Map grid geometry (fog/light/token placement). */
   grid: Grid;
-  /** Sheet per member id, mutated in place by the sheet panel. */
+  /** Sheet per sheetId, mutated in place by the sheet panel. */
   sheets: Map<string, Sheet>;
   /** Host/guest flags plus the roll sequence counter. */
   session: Session;
@@ -54,20 +68,36 @@ export interface AppShell {
   show(): void;
   /** Release the 3D dice view and detach the table. */
   dispose(): void;
+  /** Rebuild the sheet bar from the current visible sheets. */
+  refreshSheets(): void;
+}
+
+function peerIdOf(session: Session): string {
+  return session.peerId !== "" ? session.peerId : session.userId;
+}
+
+function isGMOf(session: Session): boolean {
+  return session.isGM ?? !session.guest;
+}
+
+/** Fichas visíveis p/ a sessão (GM=todas; player=próprias+compartilhadas). */
+export function visibleSheetsForSession(
+  sheets: Map<string, Sheet>,
+  session: Session,
+): Sheet[] {
+  const peerId = peerIdOf(session);
+  const isGM = isGMOf(session);
+  const out: Sheet[] = [];
+  for (const sheet of sheets.values()) {
+    if (canView(sheet, peerId, isGM)) out.push(sheet);
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Create the table shell; `show()` mounts it into the root. */
 export function createAppShell(deps: AppShellDeps): AppShell {
   const { root, room, grid, sheets, session } = deps;
-  // Guests see only their own sheet: the member bar shrinks to their id
-  // (the host keeps the full table selector). Unknown guests fall back
-  // to the table head until the join assigns them an id.
-  const ownId = session.guest ? session.userId : "";
-  const visibleMembers =
-    session.guest && ownId !== "" ? [ownId] : [...MEMBERS];
-  let selected = visibleMembers.includes(MEMBERS[0])
-    ? MEMBERS[0]
-    : visibleMembers[0];
+  let selected = session.character ?? "";
   let mounted: HTMLElement | null = null;
 
   const canvas = document.createElement("canvas");
@@ -80,12 +110,26 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   const sheetPanel = document.createElement("div");
 
   const tokenBar = createTokenBar({
-    members: visibleMembers,
+    items: [],
     onSelect: (id) => {
       selected = id;
+      session.character = id;
+      // Legado: mantém userId apontando p/ seleção (migração).
       showSheet();
     },
   });
+
+  function refreshBar(): void {
+    const visible = visibleSheetsForSession(sheets, session);
+    tokenBar.setItems(visible.map((s) => ({ id: s.id, label: s.name })));
+    // Seleção inicial: character válido, senão primeira visível.
+    if (!visible.some((s) => s.id === selected)) {
+      selected = session.character && visible.some((s) => s.id === session.character)
+        ? session.character
+        : (visible[0]?.id ?? "");
+      if (selected !== "") session.character = selected;
+    }
+  }
 
   // 3D dice mounted next to the numeric result: mirrors every resolved
   // roll (face comes from the host via `resolveRoll`, never rolled here).
@@ -101,8 +145,11 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       const delta = publishRoll(result, `offline-${++session.rollSeq}`);
       publish(delta);
       const frame = frameForResult(result);
+      const who = session.character
+        ? (sheets.get(session.character)?.name ?? session.character)
+        : session.displayName;
       dice.setResult(
-        frame.faces.map((f) => f.label).join(" ") + ` = ${result.total}`,
+        `${who}: ` + frame.faces.map((f) => f.label).join(" ") + ` = ${result.total}`,
       );
       diceView?.show(frame);
     },
@@ -111,7 +158,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   /** Apply locally and mirror into the hosted room (host only). */
   function publish(delta: Delta): void {
     room.apply(delta);
-    if (session.backend && !session.guest) session.backend.pushDelta(delta);
+    if (session.backend && isGMOf(session)) session.backend.pushDelta(delta);
   }
 
   function draw(): void {
@@ -138,24 +185,51 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   }
 
   function showSheet(): void {
-    const sheet = sheets.get(selected);
-    if (!sheet) return;
+    refreshBar();
+    const sheet = selected !== "" ? sheets.get(selected) : undefined;
+    if (!sheet) {
+      sheetPanel.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "sheet-empty";
+      empty.textContent =
+        sheets.size === 0
+          ? "Nenhuma ficha — crie uma pelo menu."
+          : "Selecione uma ficha visível acima.";
+      sheetPanel.appendChild(empty);
+      tokenBar.setSelected(selected, undefined);
+      return;
+    }
+    // Fail-closed: sem visão, não renderiza.
+    const peerId = peerIdOf(session);
+    const isGM = isGMOf(session);
+    if (!canView(sheet, peerId, isGM)) {
+      sheetPanel.innerHTML = "";
+      tokenBar.setSelected(selected, undefined);
+      return;
+    }
     renderSheetPanel(sheetPanel, sheet, {
       onChange: (updated) => {
-        sheets.set(selected, updated);
+        const prev = sheets.get(selected);
+        const sanitized = sanitizeSheetWrite(prev ?? null, updated, {
+          peerId,
+          isGM,
+        });
+        sheets.set(selected, sanitized);
+        const delta = { upsert: { [sheetKey(selected)]: encodeSheet(sanitized) } };
+        room.apply(delta);
         // Mirror edits into the hosted room (host-only): the sheet
         // travels as one RoomState value under the `sheet:<id>` key.
-        if (session.backend && !session.guest) {
-          session.backend.pushDelta({
-            upsert: { [sheetKey(selected)]: encodeSheet(updated) },
-          });
+        if (session.backend && isGM) {
+          session.backend.pushDelta(delta);
         }
-        tokenBar.setSelected(selected, updated);
+        refreshBar();
+        tokenBar.setSelected(selected, sanitized);
       },
       onRoll: (label, result) => {
         const delta = publishRoll(result, `roll-${++session.rollSeq}`);
         publish(delta);
-        dice.setResult(`${label}: ${result.rolls.join(" ")} = ${result.total}`);
+        const who = sheets.get(selected)?.name ?? label;
+        dice.setResult(`${who} — ${label}: ${result.rolls.join(" ")} = ${result.total}`);
         diceView?.show(frameForResult(result));
       },
     });
@@ -165,10 +239,23 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   canvas.addEventListener("click", (ev) => {
     const cell = eventToCell(canvas, ev.clientX, ev.clientY);
     if (!cell || !inBounds(grid, cell.x, cell.y)) return;
-    if (!room.moveToken(selected, { x: cell.x, y: cell.y })) return;
-    const moved = room.tokens().find((t) => t.id === selected);
-    if (moved && session.backend && !session.guest) {
-      session.backend.pushDelta({ upsert: { [tokenKey(selected)]: encodeToken(moved) } });
+    const peerId = peerIdOf(session);
+    const isGM = isGMOf(session);
+    // Token da ficha selecionada (herda controle); legado cai p/ id.
+    const tokens = room.tokens();
+    let target = tokens.find((t) => t.represents === selected);
+    if (!target) target = tokens.find((t) => t.id === selected);
+    if (!target) {
+      // Sem token vinculado: GM move o primeiro; player não move nada.
+      if (!isGM) return;
+      target = tokens[0];
+      if (!target) return;
+    }
+    if (!canControlToken(target, sheets, peerId, isGM)) return;
+    if (!room.moveToken(target.id, { x: cell.x, y: cell.y })) return;
+    const moved = room.tokens().find((t) => t.id === target!.id);
+    if (moved && session.backend && isGM) {
+      session.backend.pushDelta({ upsert: { [tokenKey(target.id)]: encodeToken(moved) } });
     }
     draw();
   });
@@ -206,26 +293,23 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       mounted?.remove();
       mounted = null;
     },
+    refreshSheets(): void {
+      refreshBar();
+      showSheet();
+    },
   };
 }
 
-/** Fresh sheets for every member (used by `startApp`). */
+/** Fresh empty sheets (sem slots fixos; usado por `startApp`). */
+export function createEmptySheets(): Map<string, Sheet> {
+  return new Map<string, Sheet>();
+}
+
+/**
+ * Legado: fichas por membro fixo (`dm`,`p1`..). Mantido p/ migração —
+ * prefira `createEmptySheets` (sem slots). Retorna mapa vazio.
+ * @deprecated
+ */
 export function createMemberSheets(): Map<string, Sheet> {
-  return new Map(
-    MEMBERS.map((id, i) => [
-      id,
-      decodeSheet(
-        encodeSheet({
-          id,
-          name: id,
-          ownerId: id,
-          level: 1,
-          profBonus: 2,
-          ac: 10 + (i % 3),
-          hp: 10,
-          maxHp: 10,
-        }),
-      ),
-    ]),
-  );
+  return new Map<string, Sheet>();
 }
