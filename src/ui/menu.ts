@@ -10,8 +10,10 @@ export interface MenuHandlers {
   onHost(): void;
   /** "Confirmar" in the join panel, with the typed address (IP:Porta). */
   onJoin(address: string): void;
-  /** "Criar Ficha de Personagem": open the table shell. */
+  /** "Criar Ficha de Personagem": open the sheet creator. */
   onCreateSheet(): void;
+  /** "Meus Personagens": open the saved-character library. */
+  onOpenLibrary(): void;
 }
 
 export interface Menu {
@@ -131,7 +133,13 @@ export function createMenu(root: HTMLElement, handlers: MenuHandlers): Menu {
   sheetBtn.innerHTML = '<span class="btn-icon">📜</span> Criar Ficha de Personagem';
   sheetBtn.addEventListener("click", () => handlers.onCreateSheet());
 
-  buttonsDiv.append(hostBtn, joinBtn, sheetBtn);
+  // Botão Biblioteca (fichas salvas, sem grid/mesa).
+  const libraryBtn = document.createElement("button");
+  libraryBtn.className = "menu-btn";
+  libraryBtn.innerHTML = '<span class="btn-icon">📚</span> Meus Personagens';
+  libraryBtn.addEventListener("click", () => handlers.onOpenLibrary());
+
+  buttonsDiv.append(hostBtn, joinBtn, sheetBtn, libraryBtn);
 
   // Painel de entrada (IP:Porta)
   const joinPanel = document.createElement("div");
