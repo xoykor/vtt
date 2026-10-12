@@ -37,9 +37,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm run test:unit
       - run: npm run typecheck
+      # Task 5: build the real Rust host binary so the interop E2E
+      # (e2e/rust-ts-interop.spec.ts) runs instead of skipping.
+      - run: cargo build --bin host
+        working-directory: src-tauri
       - run: npx playwright install --with-deps chromium
       # Task 6: full E2E suite — room.spec.ts (hermetic rejoin)
       # + lan.spec.ts (real loopback TCP: snapshot + delta).
