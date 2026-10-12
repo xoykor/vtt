@@ -15,7 +15,10 @@ export interface TokenBarOptions {
   onSelect: (id: string) => void;
   /** Sheet buttons to show (dynamic; empty = nenhuma ficha visível). */
   items?: SheetBarItem[];
-  /** Legado: ids simples (migração de `members`). */
+  /**
+   * Legado: ids simples (migração de `members`).
+   * @deprecated use `items` (sem slots fixos).
+   */
   members?: string[];
 }
 

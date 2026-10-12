@@ -54,9 +54,17 @@ export function visibleSheets(
     try {
       sheet = decodeSheet(value);
     } catch {
-      // Ilegível: pública legada ou chave própria passa como está
-      // (migração); demais fichas: fail-closed (não vaza p/ guest).
-      if (isPublicLegacy || isOwnKey) next[key] = value;
+      // Ilegível: pública legada ou chave própria passa SEM gmNotes
+      // (fail-closed); demais fichas: ocultar (não vaza p/ guest).
+      if (isPublicLegacy || isOwnKey) {
+        try {
+          const raw = JSON.parse(value) as Record<string, unknown>;
+          delete raw.gmNotes;
+          next[key] = JSON.stringify(raw);
+        } catch {
+          // Nem JSON: não vaza.
+        }
+      }
       continue;
     }
     const projected = filterSheetForPeer(sheet, userId, false);
@@ -80,14 +88,28 @@ export function visibleSheets(
     // Preserva o wire original quando a projeção é identidade (evita
     // churn e mantém compat com snapshots legados sem gmNotes):
     // controlador sem gmNotes passa verbatim; com gmNotes re-codifica
-    // sem o campo; viewer (metadados) sempre re-codifica.
-    if (isController(sheet, userId) && sheet.gmNotes === undefined) {
+    // sem o campo; viewer (metadados) sempre re-codifica. O wire manda
+    // sobre o decode: `gmNotes:null`/number é descartado no decode mas
+    // continua no JSON bruto, então qualquer chave gmNotes no wire
+    // re-codifica (nunca passa verbatim com gmNotes).
+    if (isController(sheet, userId) && sheet.gmNotes === undefined && !wireHasGmNotes(value)) {
       next[key] = value;
     } else {
       next[key] = encodeSheet(projected);
     }
   }
   return next;
+}
+
+/** True quando o JSON bruto contém a chave `gmNotes` (qualquer tipo). */
+function wireHasGmNotes(value: string): boolean {
+  try {
+    const raw = JSON.parse(value) as Record<string, unknown>;
+    return Object.prototype.hasOwnProperty.call(raw, "gmNotes");
+  } catch {
+    // Ilegível: tratar como suspeito (re-codificar, nunca verbatim).
+    return true;
+  }
 }
 
 /** Controlador direto (espelha canControl p/ decidir verbatim vs re-encode). */

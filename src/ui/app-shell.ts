@@ -13,7 +13,7 @@ import { encodeToken } from "../map/tokens";
 import type { Delta } from "../net/peer";
 import { publishRoll, resolveRoll } from "../dice/roller";
 import { frameForResult } from "../dice/scene";
-import { canControlToken, canView, sanitizeSheetWrite } from "../sheet/acl";
+import { canControl, canControlToken, canView, filterSheetForPeer, sanitizeSheetWrite } from "../sheet/acl";
 import { encodeSheet } from "../sheet/srd";
 import type { Sheet } from "../sheet/types";
 import { sheetKey } from "../sheet/visibility";
@@ -80,7 +80,7 @@ function isGMOf(session: Session): boolean {
   return session.isGM ?? !session.guest;
 }
 
-/** Fichas visíveis p/ a sessão (GM=todas; player=próprias+compartilhadas). */
+/** Fichas visíveis p/ a sessão (GM=todas; player=próprias+compartilhadas, projetadas: viewer=metadados). */
 export function visibleSheetsForSession(
   sheets: Map<string, Sheet>,
   session: Session,
@@ -89,7 +89,8 @@ export function visibleSheetsForSession(
   const isGM = isGMOf(session);
   const out: Sheet[] = [];
   for (const sheet of sheets.values()) {
-    if (canView(sheet, peerId, isGM)) out.push(sheet);
+    const projected = filterSheetForPeer(sheet, peerId, isGM);
+    if (projected) out.push(projected);
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -199,12 +200,33 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       tokenBar.setSelected(selected, undefined);
       return;
     }
-    // Fail-closed: sem visão, não renderiza.
+    // Fail-closed: sem visão, não renderiza. Renderiza a projeção
+    // filtrada (viewer=metadados, sem gmNotes p/ não-GM), nunca a ficha
+    // completa de quem só pode ver.
     const peerId = peerIdOf(session);
     const isGM = isGMOf(session);
-    if (!canView(sheet, peerId, isGM)) {
+    const projected = filterSheetForPeer(sheet, peerId, isGM);
+    if (!projected) {
       sheetPanel.innerHTML = "";
       tokenBar.setSelected(selected, undefined);
+      return;
+    }
+    // Viewer (vê, não controla): painel somente-leitura da projeção —
+    // edições locais não persistem (fail-closed, sem corromper stats).
+    if (!canControl(sheet, peerId, isGM)) {
+      renderSheetPanel(sheetPanel, projected, {
+        onChange: (updated) => {
+          tokenBar.setSelected(selected, updated);
+        },
+        onRoll: (label, result) => {
+          const delta = publishRoll(result, `roll-${++session.rollSeq}`);
+          publish(delta);
+          const who = sheets.get(selected)?.name ?? label;
+          dice.setResult(`${who} — ${label}: ${result.rolls.join(" ")} = ${result.total}`);
+          diceView?.show(frameForResult(result));
+        },
+      });
+      tokenBar.setSelected(selected, projected);
       return;
     }
     renderSheetPanel(sheetPanel, sheet, {

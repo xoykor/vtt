@@ -82,10 +82,10 @@ export function filterSheetForPeer(
 
 /**
  * Travamento de escrita (fail-closed): GM escreve ACL + gmNotes
- * livremente; não-GM tem `viewers`/`controllers`/`public*`/`gmNotes`
- * ignorados. Criação (`prev === null`) por player força
- * `controllers=[author]`. Campos de dados (nome/hp/...) passam sempre;
- * só ACL + gmNotes são travadas.
+ * livremente; não-GM tem `viewers`/`controllers`/`public*`/`gmNotes`/
+ * `ownerId` ignorados. Criação (`prev === null`) por player força
+ * `controllers=[author]` + `ownerId=author`. Campos de dados (nome/hp/...)
+ * passam sempre; só ACL + gmNotes + ownerId são travadas.
  */
 export function sanitizeSheetWrite(
   prev: Sheet | null,
@@ -96,17 +96,18 @@ export function sanitizeSheetWrite(
   const out: Sheet = { ...next };
   if (prev === null) {
     out.controllers = [author.peerId];
-    out.viewers = next.viewers !== undefined ? [] : undefined;
+    out.viewers = [];
     // Sem re-compartilhar na criação: público sempre falso p/ player.
     if (next.publicView === true || next.publicControl === true) {
       out.publicView = false;
       out.publicControl = false;
     }
-    // Player nunca escreve gmNotes (só GM).
+    // Player nunca escreve gmNotes (só GM) nem sequestra ownerId.
     delete out.gmNotes;
+    out.ownerId = author.peerId;
     return out;
   }
-  // Edição: preserva ACL + gmNotes existentes (player não re-compartilha).
+  // Edição: preserva ACL + gmNotes + ownerId existentes.
   if (prev.controllers !== undefined) out.controllers = [...prev.controllers];
   else delete out.controllers;
   if (prev.viewers !== undefined) out.viewers = [...prev.viewers];
@@ -117,6 +118,8 @@ export function sanitizeSheetWrite(
   else delete out.publicControl;
   if (prev.gmNotes !== undefined) out.gmNotes = prev.gmNotes;
   else delete out.gmNotes;
+  if (prev.ownerId !== undefined) out.ownerId = prev.ownerId;
+  else delete out.ownerId;
   return out;
 }
 

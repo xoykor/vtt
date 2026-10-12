@@ -34,6 +34,7 @@ import { sanitizeSheetWrite } from "./sheet/acl";
 import { decodeSheet, encodeSheet } from "./sheet/srd";
 import {
   isSheetKey,
+  PUBLIC_SHEET_PREFIX,
   sheetKey,
   visibleSheets,
 } from "./sheet/visibility";
@@ -75,12 +76,17 @@ const invokeViaBridge: InvokeFn = (cmd, args) => tauriInvoke(cmd, args);
 export const HOST_UNAVAILABLE_MESSAGE =
   "Hospedar requer o app Tauri — rode `npm run tauri dev` ou use o instalador";
 
-/** Sync the sheets map from the (already filtered) room state. */
-function syncSheetsFromRoom(room: OfflineRoom, sheets: Map<string, import("./sheet/types").Sheet>): void {
+/** Sync the sheets map from the (already filtered) room state. Exported p/ testes. */
+export function syncSheetsFromRoom(room: OfflineRoom, sheets: Map<string, import("./sheet/types").Sheet>): void {
   for (const [key, value] of Object.entries(room.getState())) {
     if (!isSheetKey(key)) continue;
-    const id = key.slice("sheet:".length);
-    // Legado `sheet:public:*`: id inclui prefixo — mantém chave cheia.
+    // Legado `sheet:public:*`: mapear p/ o id real (`foo`), sem criar
+    // id `public:foo` no Map local; chave normal vence quando ambas existem.
+    const id = key.startsWith(PUBLIC_SHEET_PREFIX)
+      ? key.slice(PUBLIC_SHEET_PREFIX.length)
+      : key.slice("sheet:".length);
+    if (id.length === 0) continue;
+    if (key.startsWith(PUBLIC_SHEET_PREFIX) && sheets.has(id)) continue;
     try {
       sheets.set(id, decodeSheet(value));
     } catch {
