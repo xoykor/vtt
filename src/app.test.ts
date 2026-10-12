@@ -60,7 +60,7 @@ test("Criar Ficha opens the fullscreen creator without the map", () => {
   }
 });
 
-test("saving a sheet from the creator opens the table", () => {
+test("saving a sheet from the creator opens the saved-character library", () => {
   const root = document.createElement("div");
   document.body.appendChild(root);
   try {
@@ -69,7 +69,10 @@ test("saving a sheet from the creator opens the table", () => {
     root.querySelector<HTMLInputElement>(".creator-name")!.value = "Borin";
     root.querySelector<HTMLButtonElement>(".creator-save")!.click();
     expect(root.querySelector(".sheet-creator")).toBeNull();
-    expect(root.querySelector(".app-content")).not.toBeNull();
+    // No table/grid outside a session: the library is the destination.
+    expect(root.querySelector(".char-library")).not.toBeNull();
+    expect(root.querySelector(".app-content")).toBeNull();
+    expect(root.querySelector("canvas")).toBeNull();
   } finally {
     root.remove();
   }

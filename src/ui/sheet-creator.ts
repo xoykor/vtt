@@ -32,6 +32,8 @@ export interface SheetCreatorOptions {
   peers?: SessionPeer[];
   /** Legado: dono do slot fixo (migração → authorPeerId). */
   ownerId?: string;
+  /** Edição: ficha existente p/ pré-preencher (salvar mantém o id). */
+  initial?: Sheet;
   /** Called with the built sheet when the user saves. */
   onSave: (sheet: Sheet) => void;
   /** Called when the user cancels (nothing is saved). */
@@ -100,6 +102,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
   // Sem slots fixos: autor = peer atual (legado ownerId vira peerId).
   const authorPeerId = options.authorPeerId ?? options.ownerId ?? "local-player";
   const isGM = options.isGM ?? false;
+  const initial = options.initial;
   const overlay = document.createElement("div");
   overlay.className = "sheet-creator";
 
@@ -107,7 +110,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
   card.className = "creator-card";
   overlay.appendChild(card);
 
-  card.appendChild(header("Criar Ficha de Personagem"));
+  card.appendChild(header(initial ? "Editar Ficha" : "Criar Ficha de Personagem"));
 
   // ── Identity header (always visible, sem seletor de jogador) ──
   const head = document.createElement("div");
@@ -115,12 +118,18 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
 
   const nameInput = textInput("creator-name", "Nome do personagem");
   const classInput = textInput("creator-class", "Classe (ex. Guerreiro)");
-  const levelInput = numInput("creator-level", 1, 1, 20);
+  const levelInput = numInput("creator-level", initial?.level ?? 1, 1, 20);
   const raceInput = textInput("creator-race", "Raça");
   const alignInput = textInput("creator-alignment", "Alinhamento");
-  const xpInput = numInput("creator-xp", 0, 0);
-  const acInput = numInput("creator-ac", 10);
-  const hpInput = numInput("creator-hp", 10, 1);
+  const xpInput = numInput("creator-xp", initial?.xp ?? 0, 0);
+  const acInput = numInput("creator-ac", initial?.ac ?? 10);
+  const hpInput = numInput("creator-hp", initial?.maxHp ?? initial?.hp ?? 10, 1);
+  if (initial) {
+    nameInput.value = initial.name ?? "";
+    classInput.value = initial.charClass ?? "";
+    raceInput.value = initial.race ?? "";
+    alignInput.value = initial.alignment ?? "";
+  }
   const profLine = document.createElement("div");
   profLine.className = "creator-prof";
 
@@ -162,11 +171,13 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     publicViewCheck = document.createElement("input");
     publicViewCheck.type = "checkbox";
     publicViewCheck.className = "creator-public-view";
+    publicViewCheck.checked = initial?.publicView ?? false;
     const pvLabel = document.createElement("label");
     pvLabel.append(publicViewCheck, document.createTextNode(" Visível p/ todos (publicView)"));
     publicControlCheck = document.createElement("input");
     publicControlCheck.type = "checkbox";
     publicControlCheck.className = "creator-public-control";
+    publicControlCheck.checked = initial?.publicControl ?? false;
     const pcLabel = document.createElement("label");
     pcLabel.append(publicControlCheck, document.createTextNode(" Controlável p/ todos (publicControl)"));
     share.append(pvLabel, pcLabel);
@@ -184,12 +195,14 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
         vCheck.type = "checkbox";
         vCheck.className = "creator-viewer-check";
         vCheck.dataset.peer = peer.peerId;
+        vCheck.checked = initial?.viewers?.includes(peer.peerId) ?? false;
         const vLabel = document.createElement("label");
         vLabel.append(vCheck, document.createTextNode(" ver"));
         const cCheck = document.createElement("input");
         cCheck.type = "checkbox";
         cCheck.className = "creator-controller-check";
         cCheck.dataset.peer = peer.peerId;
+        cCheck.checked = initial?.controllers?.includes(peer.peerId) ?? false;
         const cLabel = document.createElement("label");
         cLabel.append(cCheck, document.createTextNode(" controlar"));
         viewerChecks.set(peer.peerId, vCheck);
@@ -203,6 +216,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     gmNotesInput.className = "creator-gm-notes";
     gmNotesInput.rows = 3;
     gmNotesInput.placeholder = "Notas do GM (nunca sincronizam p/ jogadores)...";
+    if (initial?.gmNotes) gmNotesInput.value = initial.gmNotes;
     share.appendChild(field("Notas do GM", gmNotesInput));
     card.appendChild(share);
   }
@@ -253,10 +267,10 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     const name = document.createElement("span");
     name.className = "creator-ability-name";
     name.textContent = ABILITY_LABELS[key];
-    const input = numInput("creator-ability-score", DEFAULT_ABILITIES[key]);
+    const input = numInput("creator-ability-score", initial?.abilities?.[key] ?? DEFAULT_ABILITIES[key]);
     const mod = document.createElement("span");
     mod.className = "creator-ability-mod";
-    mod.textContent = modText(abilityMod(DEFAULT_ABILITIES[key]));
+    mod.textContent = modText(abilityMod(Number(input.value)));
     input.addEventListener("input", () => {
       const v = Number(input.value);
       if (!Number.isFinite(v)) return;
@@ -294,6 +308,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     check.type = "checkbox";
     check.className = "creator-skill-check";
     check.dataset.skill = def.name;
+    check.checked = initial?.skills?.find((s) => s.name === def.name)?.proficient ?? false;
     const mod = document.createElement("span");
     mod.className = "creator-skill-mod";
     row.append(
@@ -333,16 +348,12 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
   const spellRows = document.createElement("div");
   spellRows.className = "creator-list";
   const draftSpells: Spell[] = [];
-  const addSpell = document.createElement("button");
-  addSpell.type = "button";
-  addSpell.className = "menu-btn creator-add";
-  addSpell.textContent = "+ Adicionar magia";
-  addSpell.addEventListener("click", () => {
-    const spell: Spell = { id: uid("spell"), name: "", level: 1 };
+  function appendSpellRow(spell: Spell): void {
     draftSpells.push(spell);
     const row = document.createElement("div");
     row.className = "creator-row";
     const nameIn = textInput("creator-spell-name", "Nome da magia");
+    nameIn.value = spell.name;
     nameIn.addEventListener("input", () => {
       spell.name = nameIn.value;
     });
@@ -352,7 +363,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
       const opt = document.createElement("option");
       opt.value = String(lv);
       opt.textContent = lv === 0 ? "Truque" : `Nível ${lv}`;
-      if (lv === 1) opt.selected = true;
+      if (lv === spell.level) opt.selected = true;
       levelSel.appendChild(opt);
     }
     levelSel.addEventListener("change", () => {
@@ -368,24 +379,28 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     });
     row.append(nameIn, levelSel, del);
     spellRows.appendChild(row);
+  }
+  const addSpell = document.createElement("button");
+  addSpell.type = "button";
+  addSpell.className = "menu-btn creator-add";
+  addSpell.textContent = "+ Adicionar magia";
+  addSpell.addEventListener("click", () => {
+    appendSpellRow({ id: uid("spell"), name: "", level: 1 });
   });
+  for (const s of initial?.spells ?? []) appendSpellRow({ ...s });
   const equipRows = document.createElement("div");
   equipRows.className = "creator-list";
   const draftItems: InventoryItem[] = [];
-  const addItem = document.createElement("button");
-  addItem.type = "button";
-  addItem.className = "menu-btn creator-add";
-  addItem.textContent = "+ Adicionar equipamento";
-  addItem.addEventListener("click", () => {
-    const item: InventoryItem = { id: uid("item"), name: "", qty: 1 };
+  function appendItemRow(item: InventoryItem): void {
     draftItems.push(item);
     const row = document.createElement("div");
     row.className = "creator-row";
     const nameIn = textInput("creator-item-name", "Equipamento");
+    nameIn.value = item.name;
     nameIn.addEventListener("input", () => {
       item.name = nameIn.value;
     });
-    const qtyIn = numInput("creator-item-qty", 1, 0);
+    const qtyIn = numInput("creator-item-qty", item.qty, 0);
     qtyIn.addEventListener("input", () => {
       const v = Number(qtyIn.value);
       if (Number.isFinite(v)) item.qty = v;
@@ -400,12 +415,20 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     });
     row.append(nameIn, qtyIn, del);
     equipRows.appendChild(row);
+  }
+  const addItem = document.createElement("button");
+  addItem.type = "button";
+  addItem.className = "menu-btn creator-add";
+  addItem.textContent = "+ Adicionar equipamento";
+  addItem.addEventListener("click", () => {
+    appendItemRow({ id: uid("item"), name: "", qty: 1 });
   });
+  for (const i of initial?.inventory ?? []) appendItemRow({ ...i });
   const moneyGrid = document.createElement("div");
   moneyGrid.className = "creator-money";
   const moneyInputs = new Map<keyof Money, HTMLInputElement>();
   for (const coin of ["cp", "sp", "ep", "gp", "pp"] as const) {
-    const input = numInput(`creator-money-${coin}`, 0, 0);
+    const input = numInput(`creator-money-${coin}`, initial?.money?.[coin] ?? 0, 0);
     moneyInputs.set(coin, input);
     moneyGrid.appendChild(field(coin.toUpperCase(), input));
   }
@@ -423,6 +446,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
   // ── Tab: Bio/Notas ──
   const bioPanel = panelEls.get("bio")!;
   const langInput = textInput("creator-languages", "Comum, Élfico...");
+  if (initial?.languages) langInput.value = initial.languages;
   const traitInputs = new Map<keyof SheetTraits, HTMLInputElement>();
   const traitDefs: Array<[keyof SheetTraits, string]> = [
     ["personality", "Personalidade"],
@@ -434,13 +458,17 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
   backstoryInput.className = "creator-backstory";
   backstoryInput.rows = 4;
   backstoryInput.placeholder = "História do personagem...";
+  if (initial?.backstory) backstoryInput.value = initial.backstory;
   const notesInput = document.createElement("textarea");
   notesInput.className = "creator-notes";
   notesInput.rows = 4;
   notesInput.placeholder = "Anotações livres...";
+  if (initial?.notes) notesInput.value = initial.notes;
   bioPanel.append(field("Idiomas", langInput));
   for (const [key, label] of traitDefs) {
     const input = textInput(`creator-trait-${key}`, label);
+    const preset = initial?.traits?.[key];
+    if (preset) input.value = preset;
     traitInputs.set(key, input);
     bioPanel.appendChild(field(label, input));
   }
@@ -487,7 +515,7 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
       pp: Math.max(0, Math.floor(Number(moneyInputs.get("pp")?.value) || 0)),
     };
     const sheet: Sheet = {
-      id: uid("sheet"),
+      id: initial?.id ?? uid("sheet"),
       name: nameInput.value.trim() || "Sem nome",
       level,
       charClass: classInput.value.trim(),
@@ -513,6 +541,28 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
       backstory: backstoryInput.value,
       notes: notesInput.value,
     };
+    // Edição: carrega blocos que o criador não edita (retrato,
+    // ataques, salvamentos, condições, slots, inspiração...) para não
+    // apagar dados ao salvar.
+    if (initial) {
+      const keep: Array<keyof Sheet> = [
+        "photo",
+        "attacks",
+        "saves",
+        "conditions",
+        "deathSaves",
+        "spellSlots",
+        "inspiration",
+        "speed",
+        "initiativeMisc",
+        "tempHp",
+      ];
+      for (const key of keep) {
+        const value = initial[key];
+        if (value !== undefined) (sheet as unknown as Record<string, unknown>)[key] = value;
+      }
+      if (!isGM && initial.gmNotes !== undefined) sheet.gmNotes = initial.gmNotes;
+    }
     // ACL: player cria a própria (auto controllers=[creator], sem
     // re-compartilhar); GM escreve ACL livremente via UI acima.
     if (isGM) {
@@ -536,8 +586,9 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
       sheet.publicView = false;
       sheet.publicControl = false;
     }
-    // Migração: ownerId espelha o autor (legado lê ownerId).
-    sheet.ownerId = authorPeerId;
+    // Migração: ownerId espelha o autor (legado lê ownerId); na
+    // edição mantém o dono original.
+    sheet.ownerId = initial?.ownerId ?? authorPeerId;
     options.onSave(sheet);
   });
   footer.append(cancelBtn, saveBtn);

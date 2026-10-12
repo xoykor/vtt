@@ -1,13 +1,9 @@
-// Playable shell bootstrap: creates the local room + grid + sheets,
-// mounts the tavern menu and wires the table shell (src/ui/app-shell.ts)
-// to the Tauri bridge when running inside the webview. Sessão sem
-// slots fixos (Roll20/Foundry): quem hospeda = GM, quem entra com
-// código = player; peers ilimitados; fichas `sheet:<id>` com ACL dupla.
-// No central server: in a plain browser the same shell runs fully
-// offline with no invoke calls; inside Tauri (`window.__TAURI__`
-// present) host/join/sync go through `create_room`, `join_room`,
-// `push_delta` and `get_snapshot` (src-tauri/src/commands.rs).
-
+// Playable shell bootstrap: tavern menu + sheet creator + saved
+// character library + table shell (src/ui/app-shell.ts). The map grid
+// only exists inside a session: saving a sheet goes to the library
+// (name, class, level, portrait) with view/edit/delete and entering a
+// session with that character (host as GM or join with IP). Hosting or
+// joining mounts the table; the library and creator never do.
 import "./styles/menu.css";
 import { createGrid } from "./map/grid";
 import { createToken, encodeToken } from "./map/tokens";
@@ -29,6 +25,15 @@ import {
 } from "./ui/app-shell";
 import { createMenu } from "./ui/menu";
 import { createSheetCreator } from "./ui/sheet-creator";
+import {
+  createCharacterLibrary,
+  type LibraryView,
+} from "./ui/character-library";
+import {
+  loadLibrary,
+  saveLibrary,
+  type LibraryStorage,
+} from "./sheet/library";
 import { createPeer } from "./session/peers";
 import { sanitizeSheetWrite } from "./sheet/acl";
 import { decodeSheet, encodeSheet } from "./sheet/srd";
@@ -38,6 +43,7 @@ import {
   sheetKey,
   visibleSheets,
 } from "./sheet/visibility";
+import type { Sheet } from "./sheet/types";
 
 /** True inside the Tauri webview (invoke bridge available). */
 function isTauri(): boolean {
@@ -165,13 +171,48 @@ function makeBackend(
   };
 }
 
+export interface StartAppOptions {
+  /** Persisted library backend (defaults to localStorage). */
+  storage?: LibraryStorage;
+}
+
+/** In-memory fallback when localStorage is unavailable. */
+function memoryStorage(): LibraryStorage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => {
+      store.set(k, v);
+    },
+    removeItem: (k) => {
+      store.delete(k);
+    },
+  };
+}
+
+function resolveStorage(explicit?: LibraryStorage): LibraryStorage {
+  if (explicit) return explicit;
+  try {
+    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  } catch {
+    // Private mode / no DOM: fall through to memory.
+  }
+  return memoryStorage();
+}
+
 /** Bootstrap the shell into `root` (Task 4 webview entry). */
-export function startApp(root: HTMLElement): void {
-  // Sem slots fixos: sala vazia + mapa de fichas vazio. Peers/fichas
-  // entram dinamicamente (host=GM, join=player, criar ficha).
+export function startApp(root: HTMLElement, opts: StartAppOptions = {}): void {
+  // Sem slots fixos: sala vazia + mapa de fichas da biblioteca local.
+  // A biblioteca persiste em localStorage; a mesa (grid/tokens) só
+  // existe dentro de sessão (hospedar ou entrar).
+  const storage = resolveStorage(opts.storage);
   const room = createOfflineRoom([]);
   const grid = createGrid(10, 8);
   const sheets = createEmptySheets();
+  for (const saved of loadLibrary(storage)) sheets.set(saved.id, saved);
+  const persist = (): void => {
+    saveLibrary([...sheets.values()], storage);
+  };
   // Offline solo começa como GM ("Mestre") — hospedar mantém, entrar
   // troca p/ player. peerId = hash + nome auto-declarado.
   const local = createPeer("Mestre", true);
@@ -193,72 +234,216 @@ export function startApp(root: HTMLElement): void {
   }
 
   const shell = createAppShell({ root, room, grid, sheets, session });
+  let library: LibraryView | null = null;
+
+  function closeLibrary(): void {
+    library?.el.remove();
+    library = null;
+  }
+
+  function enterTable(): void {
+    closeLibrary();
+    menu.hide();
+    shell.show();
+    shell.refreshSheets();
+  }
+
+  /** Token vinculado à ficha (criado ao entrar em sessão, nunca ao salvar). */
+  function ensureTokenForSheet(sheet: Sheet): void {
+    const tokens = room.tokens();
+    if (tokens.some((t) => t.represents === sheet.id || t.id === sheet.id)) return;
+    try {
+      const token = createToken(
+        sheet.id,
+        { x: tokens.length % 10, y: 0 },
+        sheet.hp,
+        sheet.id,
+      );
+      const tokenDelta = { upsert: { [tokenKey(token.id)]: encodeToken(token) } };
+      room.apply(tokenDelta);
+      if (session.backend && session.isGM) {
+        session.backend.pushDelta(tokenDelta);
+      }
+    } catch {
+      // Token inválido: a ficha entra sem token (fail-closed).
+    }
+  }
+
+  /** Host a session with `sheet` as the active character (GM). */
+  function hostWithSheet(sheet: Sheet | null): void {
+    if (!isTauri()) {
+      menu.setStatus(HOST_UNAVAILABLE_MESSAGE, "error");
+      library?.setStatus(HOST_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    if (sheet) {
+      session.character = sheet.id;
+      ensureTokenForSheet(sheet);
+    }
+    menu.setStatus("Criando sala...");
+    tauriInvoke("create_room", { port: 7000 })
+      .then((reply) => {
+        session.guest = false;
+        session.isGM = true;
+        menu.setStatus(
+          `Sala hospedada: ${String(reply)} — convite ${room.inviteCode()}`,
+          "success",
+        );
+        enterTable();
+      })
+      .catch((e: Error) => {
+        const msg = `Hospedar falhou: ${e.message}`;
+        menu.setStatus(msg, "error");
+        library?.setStatus(msg);
+      });
+  }
+
+  /** Join a session with `sheet` as the active character (player). */
+  function joinWithSheet(sheet: Sheet | null, address: string): void {
+    if (!isTauri()) {
+      const msg = "Modo offline: entrada requer Tauri.";
+      menu.setStatus(msg, "error");
+      library?.setStatus(msg);
+      return;
+    }
+    menu.setStatus(`Conectando a ${address}...`);
+    joinVia(address, invokeViaBridge)
+      .then((info) => {
+        menu.setStatus(guestJoinNotice(info), "success");
+        // Quem entra com código = player (não-GM).
+        const player = createPeer("Jogador", false);
+        session.guest = true;
+        session.isGM = false;
+        session.userId = player.peerId;
+        session.peerId = player.peerId;
+        session.displayName = player.displayName;
+        session.peers = [...session.peers, player];
+        if (sheet) {
+          session.character = sheet.id;
+          ensureTokenForSheet(sheet);
+        } else {
+          session.character = null;
+        }
+        enterTable();
+      })
+      .catch((e: Error) => {
+        const msg = `Entrar falhou: ${e.message}`;
+        menu.setStatus(msg, "error");
+        library?.setStatus(msg);
+      });
+  }
+
+  /** Read-only detail overlay (abrir/ver), sem grid/mesa. */
+  function showSheetDetail(sheet: Sheet): void {
+    const overlay = document.createElement("div");
+    overlay.className = "library-detail";
+    const detailCard = document.createElement("div");
+    detailCard.className = "library-detail-card";
+    const photo = document.createElement("div");
+    photo.className = "library-detail-photo";
+    if (typeof sheet.photo === "string" && sheet.photo !== "") {
+      const img = document.createElement("img");
+      img.src = sheet.photo;
+      img.alt = sheet.name;
+      photo.appendChild(img);
+    } else {
+      const ph = document.createElement("span");
+      ph.className = "library-photo-placeholder";
+      ph.textContent = sheet.name.trim().charAt(0).toUpperCase() || "?";
+      photo.appendChild(ph);
+    }
+    const name = document.createElement("div");
+    name.className = "library-detail-name";
+    name.textContent = sheet.name;
+    const meta = document.createElement("div");
+    meta.className = "library-detail-meta";
+    const cls = sheet.charClass?.trim() !== "" ? (sheet.charClass as string) : "Sem classe";
+    meta.textContent = typeof sheet.level === "number" ? `${cls} · Nível ${sheet.level}` : cls;
+    detailCard.append(photo, name, meta);
+    if (sheet.backstory) {
+      const bio = document.createElement("div");
+      bio.className = "library-detail-bio";
+      bio.textContent = sheet.backstory;
+      detailCard.appendChild(bio);
+    }
+    const actions = document.createElement("div");
+    actions.className = "library-detail-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "menu-btn detail-edit";
+    editBtn.textContent = "Editar";
+    editBtn.addEventListener("click", () => {
+      overlay.remove();
+      showSheetCreator({ initial: sheet, returnTo: "library" });
+    });
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "menu-btn detail-close";
+    closeBtn.textContent = "Fechar";
+    closeBtn.addEventListener("click", () => overlay.remove());
+    actions.append(editBtn, closeBtn);
+    detailCard.appendChild(actions);
+    overlay.appendChild(detailCard);
+    root.appendChild(overlay);
+  }
+
+  /** Saved-character library (sem mapa/grid): view/edit/delete + host/join. */
+  function showLibrary(): void {
+    menu.hide();
+    closeLibrary();
+    const view = createCharacterLibrary([...sheets.values()], {
+      onNew: () => {
+        closeLibrary();
+        showSheetCreator({ returnTo: "library" });
+      },
+      onView: (sheet) => showSheetDetail(sheet),
+      onEdit: (sheet) => {
+        closeLibrary();
+        showSheetCreator({ initial: sheet, returnTo: "library" });
+      },
+      onDelete: (id) => {
+        sheets.delete(id);
+        persist();
+        view.refresh([...sheets.values()]);
+      },
+      onHost: (sheet) => hostWithSheet(sheet),
+      onJoin: (sheet, address) => joinWithSheet(sheet, address),
+      onBack: () => {
+        closeLibrary();
+        menu.show();
+      },
+    });
+    library = view;
+    root.appendChild(view.el);
+  }
 
   const menu = createMenu(root, {
-    onHost: () => {
-      if (!isTauri()) {
-        menu.setStatus(HOST_UNAVAILABLE_MESSAGE, "error");
-        return;
-      }
-      menu.setStatus("Criando sala...");
-      tauriInvoke("create_room", { port: 7000 })
-        .then((reply) => {
-          session.guest = false;
-          session.isGM = true;
-          menu.setStatus(
-            `Sala hospedada: ${String(reply)} — convite ${room.inviteCode()}`,
-            "success",
-          );
-          menu.hide();
-          shell.show();
-        })
-        .catch((e: Error) => {
-          menu.setStatus(`Hospedar falhou: ${e.message}`, "error");
-        });
-    },
-    onJoin: (address) => {
-      if (!isTauri()) {
-        menu.setStatus("Modo offline: entrada requer Tauri.", "error");
-        return;
-      }
-      menu.setStatus(`Conectando a ${address}...`);
-      joinVia(address, invokeViaBridge)
-        .then((info) => {
-          menu.setStatus(guestJoinNotice(info), "success");
-          // Quem entra com código = player (não-GM).
-          const player = createPeer("Jogador", false);
-          session.guest = true;
-          session.isGM = false;
-          session.userId = player.peerId;
-          session.peerId = player.peerId;
-          session.displayName = player.displayName;
-          session.character = null;
-          session.peers = [...session.peers, player];
-          menu.hide();
-          shell.show();
-        })
-        .catch((e: Error) => {
-          menu.setStatus(`Entrar falhou: ${e.message}`, "error");
-        });
-    },
+    onHost: () => hostWithSheet(null),
+    onJoin: (address) => joinWithSheet(null, address),
     onCreateSheet: () => {
-      showSheetCreator();
+      showSheetCreator({ returnTo: "menu" });
+    },
+    onOpenLibrary: () => {
+      showLibrary();
     },
   });
 
   /**
-   * Separate fullscreen sheet-creation route (no grid/map): hides the
-   * menu, mounts the creator overlay, and returns to the table on save
-   * (to the menu on cancel). Player cria a própria (auto
-   * `controllers=[creator]`); GM cria p/ qualquer um e escreve ACL.
+   * Fullscreen sheet-creation route (no grid/map): hides the menu,
+   * mounts the creator overlay, and goes to the saved-character
+   * library on save (back to the origin on cancel). Player cria a
+   * própria (auto `controllers=[creator]`); GM cria p/ qualquer um
+   * e escreve ACL.
    */
-  function showSheetCreator(): void {
+  function showSheetCreator(opts: { initial?: Sheet; returnTo: "menu" | "library" }): void {
     menu.hide();
+    closeLibrary();
     const peerId = session.peerId !== "" ? session.peerId : session.userId;
     const { el } = createSheetCreator({
       authorPeerId: peerId !== "" ? peerId : local.peerId,
       isGM: session.isGM,
       peers: session.peers,
+      initial: opts.initial,
       onSave: (sheet) => {
         // Fail-closed: ACL escrita por não-GM ignorada mesmo se a UI
         // for burlada (sanitize trava viewers/controllers/public*).
@@ -269,34 +454,17 @@ export function startApp(root: HTMLElement): void {
         sheets.set(sanitized.id, sanitized);
         const sheetDelta = { upsert: { [sheetKey(sanitized.id)]: encodeSheet(sanitized) } };
         room.apply(sheetDelta);
-        // Token vinculado (`represents`) herda controle da ficha.
-        try {
-          const token = createToken(
-            sanitized.id,
-            { x: sheets.size % 10, y: 0 },
-            sanitized.hp,
-            sanitized.id,
-          );
-          const tokenDelta = { upsert: { [tokenKey(token.id)]: encodeToken(token) } };
-          room.apply(tokenDelta);
-          if (session.backend && session.isGM) {
-            session.backend.pushDelta(sheetDelta);
-            session.backend.pushDelta(tokenDelta);
-          }
-        } catch {
-          if (session.backend && session.isGM) {
-            session.backend.pushDelta(sheetDelta);
-          }
-        }
+        persist();
         // Primeira ficha vira ativa (`user.character`).
         if (session.character === null) session.character = sanitized.id;
         el.remove();
-        shell.refreshSheets();
-        shell.show();
+        // Salvar nunca abre a mesa: biblioteca (sem grid) é o destino.
+        showLibrary();
       },
       onCancel: () => {
         el.remove();
-        menu.show();
+        if (opts.returnTo === "library") showLibrary();
+        else menu.show();
       },
     });
     root.appendChild(el);
