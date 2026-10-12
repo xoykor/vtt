@@ -1,0 +1,394 @@
+/* ─── VTT D&D 5e — Painel de Ficha (estilo Roll20) ─── */
+/* Tema taverna: verde/dourado, painel lateral direito com scroll. */
+
+.sheet-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  font-family: var(--font-body);
+  color: var(--tavern-text);
+  min-width: 0;
+}
+
+.sheet-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+  text-align: center;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── Header: foto + nome + HP/CA ─── */
+.sheet-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.sheet-photo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 3px solid var(--tavern-gold);
+  background:
+    radial-gradient(circle at 50% 35%, var(--tavern-wood-light), var(--tavern-wood));
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    inset 0 0 12px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sheet-photo:hover {
+  border-color: var(--tavern-gold-light);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.6),
+    0 0 16px rgba(212, 160, 23, 0.35);
+}
+
+.sheet-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sheet-photo-empty img {
+  display: none;
+}
+
+.sheet-photo-placeholder {
+  font-size: 2rem;
+  opacity: 0.55;
+  user-select: none;
+}
+
+.sheet-photo-input {
+  display: none;
+}
+
+.sheet-name {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--tavern-parchment);
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--tavern-wood-light);
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.sheet-name:focus {
+  border-color: var(--tavern-gold);
+}
+
+.sheet-stats {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.sheet-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  flex: 1;
+  cursor: text;
+}
+
+.sheet-stat-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--tavern-gold);
+}
+
+.sheet-stat input {
+  width: 100%;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.15rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.sheet-stat input:focus {
+  border-color: var(--tavern-gold);
+}
+
+/* ─── Seções ─── */
+.sheet-section {
+  border: 1px solid rgba(212, 160, 23, 0.25);
+  border-radius: 6px;
+  padding: 0.6rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.sheet-section-title {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+/* ─── Atributos ─── */
+.sheet-abilities {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.ability-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.45rem 0.2rem;
+  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
+  border: 2px solid var(--tavern-gold);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--tavern-text);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ability-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 10px rgba(212, 160, 23, 0.3);
+}
+
+.ability-name {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tavern-gold);
+}
+
+.ability-score {
+  width: 100%;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.1rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.ability-score:focus {
+  border-color: var(--tavern-gold);
+}
+
+.ability-mod {
+  font-size: 0.8rem;
+  color: var(--tavern-text-dim);
+}
+
+/* ─── Linhas (salvamentos / perícias / inventário) ─── */
+.sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.25rem 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--tavern-text);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.sheet-row:hover {
+  border-color: rgba(212, 160, 23, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.sheet-prof {
+  accent-color: var(--tavern-gold);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sheet-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-row-mod {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+  flex-shrink: 0;
+}
+
+.sheet-row-edit {
+  cursor: default;
+}
+
+.sheet-row-edit:hover {
+  border-color: transparent;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.sheet-row-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 0.2rem 0.4rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.sheet-row-input:focus {
+  border-color: var(--tavern-gold);
+}
+
+.sheet-row-qty {
+  flex: 0 0 3.5rem;
+  text-align: center;
+}
+
+.sheet-cond-row .sheet-row-input {
+  flex: 1 1 0;
+}
+
+.sheet-row-del {
+  background: none;
+  border: none;
+  color: var(--tavern-text-dim);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sheet-row-del:hover {
+  color: #e85a5a;
+  background: rgba(232, 90, 90, 0.15);
+}
+
+.sheet-add {
+  margin-top: 0.4rem;
+  width: 100%;
+  padding: 0.35rem;
+  background: linear-gradient(180deg, var(--tavern-green-light), var(--tavern-green));
+  border: 2px solid var(--tavern-gold);
+  border-radius: 4px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.sheet-add:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+/* ─── Traços ─── */
+.sheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.4rem;
+}
+
+.sheet-field-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--tavern-gold);
+  text-transform: uppercase;
+}
+
+.sheet-field input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 0.3rem 0.5rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.sheet-field input:focus {
+  border-color: var(--tavern-gold);
+}
+
+/* ─── Anotações ─── */
+.sheet-notes {
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 0.4rem 0.5rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.sheet-notes:focus {
+  border-color: var(--tavern-gold);
+}

@@ -12,6 +12,7 @@
 // same shell runs fully offline with no invoke calls.
 
 import "./styles/menu.css";
+import "./styles/sheet.css";
 import { createGrid, inBounds } from "./map/grid";
 import { createFog, revealFog } from "./map/fog";
 import { computeLight } from "./map/light";
@@ -31,6 +32,7 @@ import {
   type OfflineRoom,
 } from "./ui/room";
 import { eventToCell, renderMapView } from "./ui/mapview";
+import { renderSheetPanel } from "./ui/sheet-panel";
 
 const MEMBERS = ["dm", "p1", "p2", "p3", "p4", "p5"];
 const SIDES = [2, 4, 6, 8, 10, 12, 20, 100];
@@ -342,13 +344,12 @@ export function startApp(root: HTMLElement): void {
 
     const canvas = document.createElement("canvas");
     const side = document.createElement("div");
+    side.style.width = "360px";
+    side.style.flexShrink = "0";
+    side.style.overflowY = "auto";
+    side.style.maxHeight = "100%";
 
-    const sheetTitle = document.createElement("h2");
-    sheetTitle.textContent = "Ficha";
-    sheetTitle.style.fontFamily = "var(--font-display)";
-    sheetTitle.style.color = "var(--tavern-gold)";
-    const sheetBox = document.createElement("div");
-    sheetBox.style.color = "var(--tavern-text)";
+    const sheetPanel = document.createElement("div");
     const tokenList = document.createElement("div");
     const diceTitle = document.createElement("h2");
     diceTitle.textContent = "Dado";
@@ -392,9 +393,23 @@ export function startApp(root: HTMLElement): void {
 
     function showSheet(): void {
       const sheet = sheets.get(selected);
-      sheetBox.textContent = sheet
-        ? `${sheet.name} — CA ${sheet.ac} — HP ${sheet.hp}/${sheet.maxHp}`
-        : "—";
+      if (!sheet) return;
+      renderSheetPanel(sheetPanel, sheet, {
+        onChange: (updated) => {
+          sheets.set(selected, updated);
+          // Mirror edits into the hosted room (host-only): the sheet
+          // travels as one RoomState value under the member key.
+          if (backend && !guest) {
+            backend.pushDelta({ upsert: { [selected]: encodeSheet(updated) } });
+          }
+        },
+        onRoll: (label, result) => {
+          const delta = publishRoll(result, `roll-${++rollSeq}`);
+          room.apply(delta);
+          if (backend && !guest) backend.pushDelta(delta);
+          rollOut.textContent = `${label}: ${result.rolls.join(" ")} = ${result.total}`;
+        },
+      });
     }
 
     for (const id of MEMBERS) {
@@ -433,7 +448,7 @@ export function startApp(root: HTMLElement): void {
 
     showSheet();
     draw();
-    side.append(sheetTitle, tokenList, sheetBox, diceTitle, sidesSel, rollBtn, rollOut);
+    side.append(tokenList, sheetPanel, diceTitle, sidesSel, rollBtn, rollOut);
     wrap.append(canvas, side);
     appContent.appendChild(wrap);
     root.appendChild(appContent);

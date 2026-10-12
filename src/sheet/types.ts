@@ -12,6 +12,43 @@ export interface AbilityScores {
   cha: number;
 }
 
+/** One inventory line: item name + quantity. */
+export interface InventoryItem {
+  id: string;
+  name: string;
+  qty: number;
+}
+
+/** Personality / ideals / bonds / flaws block (Roll20-style traits). */
+export interface SheetTraits {
+  personality: string;
+  ideals: string;
+  bonds: string;
+  flaws: string;
+}
+
+/** One skill: name, governing ability, proficiency checkbox. */
+export interface Skill {
+  id: string;
+  name: string;
+  ability: keyof AbilityScores;
+  proficient: boolean;
+}
+
+/** One saving throw: governing ability + proficiency checkbox. */
+export interface Save {
+  ability: keyof AbilityScores;
+  proficient: boolean;
+}
+
+/** One condition: name, duration, effect. */
+export interface Condition {
+  id: string;
+  name: string;
+  duration: string;
+  effect: string;
+}
+
 export interface Sheet {
   id: string;
   name: string;
@@ -19,6 +56,14 @@ export interface Sheet {
   hp: number;
   maxHp: number;
   abilities?: AbilityScores;
+  /** Data URL of the portrait (uploaded locally, never fetched). */
+  photo?: string;
+  inventory?: InventoryItem[];
+  traits?: SheetTraits;
+  skills?: Skill[];
+  saves?: Save[];
+  conditions?: Condition[];
+  notes?: string;
 }
 
 /**
