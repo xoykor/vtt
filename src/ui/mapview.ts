@@ -17,16 +17,18 @@ export interface MapViewData {
 
 export const CELL = 32;
 
-/** Draw the map frame onto `canvas` (resizes it to grid*CELL). */
+/** Draw the map frame onto `canvas` (resizes it to grid*cellPx). */
 export function renderMapView(
   canvas: HTMLCanvasElement,
   data: MapViewData,
+  cellPx: number = CELL,
 ): void {
   const { grid, tokens } = data;
   const fog = data.fog ?? new Array(grid.width * grid.height).fill(true);
   const lit = data.lit ?? new Array(grid.width * grid.height).fill(true);
-  canvas.width = grid.width * CELL;
-  canvas.height = grid.height * CELL;
+  const unit = cellPx > 0 ? cellPx : CELL;
+  canvas.width = grid.width * unit;
+  canvas.height = grid.height * unit;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
@@ -38,7 +40,7 @@ export function renderMapView(
       const i = y * grid.width + x;
       if (lit[i]) {
         ctx.fillStyle = "#2a2a35";
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        ctx.fillRect(x * unit, y * unit, unit, unit);
       }
     }
   }
@@ -47,23 +49,23 @@ export function renderMapView(
   ctx.lineWidth = 1;
   for (let x = 0; x <= grid.width; x++) {
     ctx.beginPath();
-    ctx.moveTo(x * CELL, 0);
-    ctx.lineTo(x * CELL, grid.height * CELL);
+    ctx.moveTo(x * unit, 0);
+    ctx.lineTo(x * unit, grid.height * unit);
     ctx.stroke();
   }
   for (let y = 0; y <= grid.height; y++) {
     ctx.beginPath();
-    ctx.moveTo(0, y * CELL);
-    ctx.lineTo(grid.width * CELL, y * CELL);
+    ctx.moveTo(0, y * unit);
+    ctx.lineTo(grid.width * unit, y * unit);
     ctx.stroke();
   }
 
   const palette = ["#e0a030", "#30a0e0", "#40c040", "#c040c0", "#e05050", "#20c0c0"];
   tokens.forEach((token, n) => {
-    const cx = (token.pos.x + 0.5) * CELL;
-    const cy = (token.pos.y + 0.5) * CELL;
+    const cx = (token.pos.x + 0.5) * unit;
+    const cy = (token.pos.y + 0.5) * unit;
     ctx.beginPath();
-    ctx.arc(cx, cy, CELL * 0.35, 0, Math.PI * 2);
+    ctx.arc(cx, cy, unit * 0.35, 0, Math.PI * 2);
     ctx.fillStyle = palette[n % palette.length];
     ctx.fill();
     ctx.fillStyle = "#000";
@@ -77,7 +79,7 @@ export function renderMapView(
   for (let y = 0; y < grid.height; y++) {
     for (let x = 0; x < grid.width; x++) {
       if (!fog[y * grid.width + x]) {
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        ctx.fillRect(x * unit, y * unit, unit, unit);
       }
     }
   }
@@ -88,11 +90,13 @@ export function eventToCell(
   canvas: HTMLCanvasElement,
   clientX: number,
   clientY: number,
+  cellPx: number = CELL,
 ): { x: number; y: number } | null {
+  const unit = cellPx > 0 ? cellPx : CELL;
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((clientX - rect.left) / CELL);
-  const y = Math.floor((clientY - rect.top) / CELL);
+  const x = Math.floor((clientX - rect.left) / unit);
+  const y = Math.floor((clientY - rect.top) / unit);
   if (x < 0 || y < 0) return null;
-  if (x * CELL >= canvas.width || y * CELL >= canvas.height) return null;
+  if (x * unit >= canvas.width || y * unit >= canvas.height) return null;
   return { x, y };
 }

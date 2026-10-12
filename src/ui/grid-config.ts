@@ -226,7 +226,10 @@ export function renderGridPanel(container: HTMLElement, opts: GridPanelOptions =
     opts.onChange?.({ ...current });
   }
 
-  typeSel.addEventListener("change", () => commit({ ...current, type: typeSel.value }));
+  typeSel.addEventListener("change", () => {
+    const next = typeSel.value;
+    commit({ ...current, type: isGridType(next) ? next : current.type });
+  });
   sizeInput.addEventListener("change", () =>
     commit({ ...current, size: Number(sizeInput.value) }),
   );

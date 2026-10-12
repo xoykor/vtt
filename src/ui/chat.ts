@@ -225,8 +225,9 @@ export function diceLabel(dice: DiceRequest): string {
 }
 
 export interface ChatPanelOptions {
-  /** Speaking-as name (current character or display name). */
-  speaker: string;
+  /** Speaking-as name (current character or display name). A function
+   *  is re-read on every send/refresh so it follows the selection. */
+  speaker: string | (() => string);
   /** True for the GM (may send /gmroll and /desc). */
   isGM?: boolean;
   /** Broadcast role (unknown roles stay local-only, fail-closed). */
@@ -255,6 +256,8 @@ export function renderChatPanel(container: HTMLElement, opts: ChatPanelOptions):
   const isGM = opts.isGM ?? false;
   const role = opts.role ?? "host";
   const rng = opts.rng ?? Math.random;
+  const speakerName = (): string =>
+    typeof opts.speaker === "function" ? opts.speaker() : opts.speaker;
   const shown: ChatMessage[] = [];
   const seenIds = new Set<string>();
   let seq = 0;
@@ -268,7 +271,10 @@ export function renderChatPanel(container: HTMLElement, opts: ChatPanelOptions):
   title.textContent = "Bate-papo";
   const speakerLine = document.createElement("div");
   speakerLine.className = "chat-speaker";
-  speakerLine.textContent = `Falando como ${opts.speaker}`;
+  const paintSpeaker = (): void => {
+    speakerLine.textContent = `Falando como ${speakerName()}`;
+  };
+  paintSpeaker();
 
   const log = document.createElement("div");
   log.dataset.testid = "chat-log";
@@ -301,7 +307,7 @@ export function renderChatPanel(container: HTMLElement, opts: ChatPanelOptions):
 
   function appendMessage(message: ChatMessage): void {
     if (seenIds.has(message.id)) return;
-    if (!canSeeChat(message, { isGM, name: opts.speaker })) return;
+    if (!canSeeChat(message, { isGM, name: speakerName() })) return;
     seenIds.add(message.id);
     shown.push(message);
     shown.sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
@@ -341,7 +347,7 @@ export function renderChatPanel(container: HTMLElement, opts: ChatPanelOptions):
     const message: ChatMessage = {
       id: `${ts}-${seq}`,
       ts,
-      from: opts.speaker,
+      from: speakerName(),
       kind: parsed.kind,
       text: parsed.text,
       ...(parsed.target ? { target: parsed.target } : {}),
@@ -368,6 +374,7 @@ export function renderChatPanel(container: HTMLElement, opts: ChatPanelOptions):
   }
 
   function refresh(): void {
+    paintSpeaker();
     if (!opts.room) return;
     const entries: { ts: number; json: string }[] = [];
     for (const [key, json] of Object.entries(opts.room.getState())) {

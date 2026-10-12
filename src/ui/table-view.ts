@@ -58,14 +58,24 @@ export interface TableViewOptions {
   /** Caller role (tile writes stay host-only, fail-closed). */
   role: string;
   grid: Grid;
-  /** Speaking-as name for the chat (defaults to Mestre/Jogador). */
-  speaker?: string;
+  /** Speaking-as name for the chat (a fn follows the selection). */
+  speaker?: string | (() => string);
   /** True for the GM (may send /gmroll and /desc). */
   isGM?: boolean;
   /** Grid persistence (defaults to window.localStorage when available). */
   storage?: GridStorage | null;
   /** Mirror for the network backend (host pushes chat deltas onward). */
   onBroadcast?: (delta: Delta) => void;
+  /**
+   * Base scene painter (background + light) called at the start of
+   * every repaint with the current cell size, instead of the built-in
+   * one. Lets the app shell own the authoritative scene while the
+   * table adds tokens, the grid overlay, drawings and the fog brush
+   * on top — all at the same scale.
+   */
+  paintBase?: (canvas: HTMLCanvasElement, cellPx: number) => void;
+  /** Start the fog mask fully revealed (default: fully hidden). */
+  initialFogVisible?: boolean;
 }
 
 export interface TableView {
@@ -88,6 +98,8 @@ export interface TableView {
   getNotes(): TextNote[];
   getFog(): Fog;
   setFogMode(mode: "reveal" | "hide"): void;
+  /** Full canvas repaint (base scene + overlay + fog). */
+  repaint(): void;
   chat: ChatPanel;
   layers: LayerPanel;
   gridPanel: GridPanel;
@@ -97,7 +109,7 @@ export interface TableView {
 export function renderTableView(container: HTMLElement, opts: TableViewOptions): TableView {
   const { room, role, grid } = opts;
   const isGM = opts.isGM ?? role === "host";
-  const speaker = opts.speaker ?? (isGM ? "Mestre" : "Jogador");
+  const speakerOpt: string | (() => string) = opts.speaker ?? (isGM ? "Mestre" : "Jogador");
   const tools = createToolState();
 
   const compact = isCompactViewport();
@@ -217,7 +229,7 @@ export function renderTableView(container: HTMLElement, opts: TableViewOptions):
     },
   });
   const chat = renderChatPanel(chatAside, {
-    speaker,
+    speaker: speakerOpt,
     isGM,
     role,
     room,
@@ -227,6 +239,9 @@ export function renderTableView(container: HTMLElement, opts: TableViewOptions):
 
   // ── Ephemeral tool state ──
   let fog: Fog = createFog(grid.width, grid.height);
+  if (opts.initialFogVisible) {
+    fog = { width: fog.width, height: fog.height, visible: fog.visible.map(() => true) };
+  }
   const drawings: Drawing[] = [];
   const notes: TextNote[] = [];
   let pan = { x: 0, y: 0 };
@@ -258,24 +273,40 @@ export function renderTableView(container: HTMLElement, opts: TableViewOptions):
       canvas.style.height = `${canvas.height}px`;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.fillStyle = "#1a1a22";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Authoritative base scene (the shell paints background +
+      // light at the table's scale); the table adds tokens, overlay
+      // and fog on top of it.
+      let basePainted = false;
+      if (opts.paintBase) {
+        try {
+          opts.paintBase(canvas, size);
+          basePainted = true;
+        } catch {
+          basePainted = false;
+        }
+      }
+      if (!basePainted) {
+        ctx.fillStyle = "#1a1a22";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
 
-      // Tokens from the room (labeled circles, like the map view).
-      const palette = ["#e0a030", "#30a0e0", "#40c040", "#c040c0", "#e05050", "#20c0c0"];
-      room.tokens().forEach((token, n) => {
-        const cx = (token.pos.x + 0.5) * size;
-        const cy = (token.pos.y + 0.5) * size;
-        ctx.beginPath();
-        ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = palette[n % palette.length];
-        ctx.fill();
-        ctx.fillStyle = "#000";
-        ctx.font = "10px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(token.id.slice(0, 4), cx, cy);
-      });
+      {
+        // Tokens from the room (labeled circles, like the map view).
+        const palette = ["#e0a030", "#30a0e0", "#40c040", "#c040c0", "#e05050", "#20c0c0"];
+        room.tokens().forEach((token, n) => {
+          const cx = (token.pos.x + 0.5) * size;
+          const cy = (token.pos.y + 0.5) * size;
+          ctx.beginPath();
+          ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
+          ctx.fillStyle = palette[n % palette.length];
+          ctx.fill();
+          ctx.fillStyle = "#000";
+          ctx.font = "10px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(token.id.slice(0, 4), cx, cy);
+        });
+      }
 
       // Grid overlay (gridless draws nothing).
       if (gridCfg.type !== "gridless") {
@@ -537,6 +568,7 @@ export function renderTableView(container: HTMLElement, opts: TableViewOptions):
       clickMode(mode === "hide" ? "fog-hide" : "fog-reveal");
       paintFogStatus();
     },
+    repaint: () => redraw(),
     chat,
     layers,
     gridPanel,

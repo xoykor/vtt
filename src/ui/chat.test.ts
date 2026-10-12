@@ -73,7 +73,7 @@ test("chat messages encode/decode through chat:<ts> keys", () => {
   expect(decodeChat(json)).toEqual(original);
   expect(() => decodeChat("{broken")).toThrow();
   expect(() => decodeChat(JSON.stringify({ kind: "say" }))).toThrow();
-  expect(() => decodeChat(JSON.stringify(msg({ kind: "portal" })))).toThrow();
+  expect(() => decodeChat(JSON.stringify({ ...msg(), kind: "portal" }))).toThrow();
 });
 
 test("publish broadcasts as chat:<ts> and denies unknown roles", () => {
