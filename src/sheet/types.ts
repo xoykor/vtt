@@ -55,6 +55,14 @@ export interface Sheet {
   ac: number;
   hp: number;
   maxHp: number;
+  /** Member that owns the sheet (`dm`, `p1`..`p5`); absent on SRD imports. */
+  ownerId?: string;
+  /** Character level (1-20); drives the derived proficiency bonus. */
+  level?: number;
+  /** Character class (e.g. "Guerreiro"), free text. */
+  charClass?: string;
+  /** Derived proficiency bonus (2 + floor((level-1)/4)), refreshed on level change. */
+  profBonus?: number;
   abilities?: AbilityScores;
   /** Data URL of the portrait (uploaded locally, never fetched). */
   photo?: string;

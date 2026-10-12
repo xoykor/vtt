@@ -93,6 +93,15 @@ test("sheet encodes to snapshot state and back", () => {
   expect(decodeSheet(encodeSheet(s))).toEqual(s);
 });
 
+test("decodeSheet round-trips owner, level, class and proficiency", () => {
+  const s = importMonster(goblinSrd);
+  s.ownerId = "p1";
+  s.level = 5;
+  s.charClass = "Guerreiro";
+  s.profBonus = 3;
+  expect(decodeSheet(encodeSheet(s))).toEqual(s);
+});
+
 test("fetchSrd deep-clones abilities on store and hit", async () => {
   const payload = {
     ...goblinSrd,

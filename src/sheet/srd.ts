@@ -181,6 +181,18 @@ export function decodeSheet(json: string): Sheet {
     hp: raw.hp,
     maxHp: raw.maxHp,
   };
+  if (typeof raw.ownerId === "string" && raw.ownerId.length > 0) {
+    sheet.ownerId = raw.ownerId;
+  }
+  if (typeof raw.level === "number" && Number.isFinite(raw.level)) {
+    sheet.level = raw.level;
+  }
+  if (typeof raw.charClass === "string") {
+    sheet.charClass = raw.charClass;
+  }
+  if (typeof raw.profBonus === "number" && Number.isFinite(raw.profBonus)) {
+    sheet.profBonus = raw.profBonus;
+  }
   if (raw.abilities !== undefined) {
     const ab = raw.abilities as Record<string, unknown> | null;
     if (typeof ab !== "object" || ab === null) {
