@@ -1,10 +1,16 @@
 // Per-sheet visibility over a room snapshot (pure, hermetic). Sheets
 // travel under `sheet:<id>` keys (same namespacing as `token:<id>` and
-// `roll:<id>`); the host sees everything while a guest sees only their
-// own sheet plus opt-in public sheets (`sheet:public:*`). Every other
-// partition passes through untouched, so map/roll sync is unaffected.
+// `roll:<id>`); the host/GM sees everything while a guest/player sees
+// only próprias + compartilhadas via ACL dupla (`viewers[]`/
+// `controllers[]`, `publicView`/`publicControl`). Viewers recebem só
+// metadados; `gmNotes` nunca sai p/ não-GM (filtrar na ingestão).
+// Legado `sheet:<userId>`/`ownerId`/`sheet:public:*` continua visível
+// (migração de slots fixos). Outras partições passam intactas.
 
 import type { Role, RoomState } from "../net/peer";
+import { filterSheetForPeer } from "./acl";
+import { decodeSheet, encodeSheet } from "./srd";
+import type { Sheet } from "./types";
 
 /** Key prefix of the sheet partition. */
 export const SHEET_PREFIX = "sheet:";
@@ -24,9 +30,10 @@ export function isSheetKey(key: string): boolean {
 }
 
 /**
- * Filter a room snapshot for `role`: host returns everything, guest
- * keeps only `sheet:<userId>` and `sheet:public:*` entries. Pure: the
- * input is never mutated.
+ * Filter a room snapshot for `role`/`userId` (peerId): host returns
+ * everything, guest keeps only próprias + compartilhadas (ACL), com
+ * projeção p/ metadados quando viewer e `gmNotes` removido p/
+ * não-GM. Pure: a entrada nunca é mutada.
  */
 export function visibleSheets(
   state: RoomState,
@@ -41,9 +48,74 @@ export function visibleSheets(
       next[key] = value;
       continue;
     }
-    if (key === own || key.startsWith(PUBLIC_SHEET_PREFIX)) {
+    const isPublicLegacy = key.startsWith(PUBLIC_SHEET_PREFIX);
+    const isOwnKey = key === own;
+    let sheet;
+    try {
+      sheet = decodeSheet(value);
+    } catch {
+      // Ilegível: pública legada ou chave própria passa SEM gmNotes
+      // (fail-closed); demais fichas: ocultar (não vaza p/ guest).
+      if (isPublicLegacy || isOwnKey) {
+        try {
+          const raw = JSON.parse(value) as Record<string, unknown>;
+          delete raw.gmNotes;
+          next[key] = JSON.stringify(raw);
+        } catch {
+          // Nem JSON: não vaza.
+        }
+      }
+      continue;
+    }
+    const projected = filterSheetForPeer(sheet, userId, false);
+    if (!projected) {
+      // Sem acesso via ACL: chave própria legada sem ACL ainda passa
+      // (migração), sem gmNotes.
+      if (isOwnKey) {
+        try {
+          const { gmNotes: _drop, ...rest } = JSON.parse(value) as Record<
+            string,
+            unknown
+          >;
+          void _drop;
+          next[key] = JSON.stringify(rest);
+        } catch {
+          // Ilegível: não vaza.
+        }
+      }
+      continue;
+    }
+    // Preserva o wire original quando a projeção é identidade (evita
+    // churn e mantém compat com snapshots legados sem gmNotes):
+    // controlador sem gmNotes passa verbatim; com gmNotes re-codifica
+    // sem o campo; viewer (metadados) sempre re-codifica. O wire manda
+    // sobre o decode: `gmNotes:null`/number é descartado no decode mas
+    // continua no JSON bruto, então qualquer chave gmNotes no wire
+    // re-codifica (nunca passa verbatim com gmNotes).
+    if (isController(sheet, userId) && sheet.gmNotes === undefined && !wireHasGmNotes(value)) {
       next[key] = value;
+    } else {
+      next[key] = encodeSheet(projected);
     }
   }
   return next;
+}
+
+/** True quando o JSON bruto contém a chave `gmNotes` (qualquer tipo). */
+function wireHasGmNotes(value: string): boolean {
+  try {
+    const raw = JSON.parse(value) as Record<string, unknown>;
+    return Object.prototype.hasOwnProperty.call(raw, "gmNotes");
+  } catch {
+    // Ilegível: tratar como suspeito (re-codificar, nunca verbatim).
+    return true;
+  }
+}
+
+/** Controlador direto (espelha canControl p/ decidir verbatim vs re-encode). */
+function isController(sheet: Sheet, userId: string): boolean {
+  if (sheet.publicControl === true) return true;
+  if (sheet.controllers?.includes(userId) === true) return true;
+  if (sheet.ownerId !== undefined && sheet.ownerId === userId) return true;
+  return false;
 }

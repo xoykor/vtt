@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // Fullscreen sheet creator: Roll20 tabs, derived proficiency, save
-// builds a Sheet with an ownerId.
+// builds a Sheet with ACL (sem slots fixos, sem seletor de jogador).
 import { expect, test } from "vitest";
 import type { Sheet } from "../sheet/types";
 import { createSheetCreator } from "./sheet-creator";
 
-function setup(ownerId = "p2"): {
+function setup(
+  opts: { authorPeerId?: string; isGM?: boolean } = {},
+): {
   el: HTMLElement;
   saved: Sheet[];
   cancelled: number;
@@ -13,7 +15,12 @@ function setup(ownerId = "p2"): {
   const saved: Sheet[] = [];
   let cancelled = 0;
   const { el } = createSheetCreator({
-    ownerId,
+    authorPeerId: opts.authorPeerId ?? "peer-b",
+    isGM: opts.isGM ?? false,
+    peers: [
+      { peerId: "peer-b", displayName: "Borin", isGM: false },
+      { peerId: "peer-c", displayName: "Celia", isGM: false },
+    ],
     onSave: (s) => saved.push(s),
     onCancel: () => {
       cancelled += 1;
@@ -63,8 +70,17 @@ test("clicking a tab switches the visible panel", () => {
   }
 });
 
-test("level 5 derives proficiency +3 and save carries the ownerId", () => {
-  const { el, saved } = setup("p2");
+test("sem seletor de jogador em lugar nenhum", () => {
+  const { el } = setup();
+  try {
+    expect(el.querySelector(".creator-owner")).toBeNull();
+  } finally {
+    teardown(el);
+  }
+});
+
+test("level 5 derives proficiency +3 and player save auto controllers=[self]", () => {
+  const { el, saved } = setup({ authorPeerId: "peer-b", isGM: false });
   try {
     el.querySelector<HTMLInputElement>(".creator-name")!.value = "Borin";
     const level = el.querySelector<HTMLInputElement>(".creator-level")!;
@@ -76,13 +92,36 @@ test("level 5 derives proficiency +3 and save carries the ownerId", () => {
     expect(saved).toHaveLength(1);
     const sheet = saved[0];
     expect(sheet.name).toBe("Borin");
-    expect(sheet.ownerId).toBe("p2");
+    expect(sheet.controllers).toEqual(["peer-b"]);
+    expect(sheet.publicView).toBe(false);
     expect(sheet.level).toBe(5);
     expect(sheet.profBonus).toBe(3);
     expect(Object.keys(sheet.abilities ?? {})).toHaveLength(6);
     expect(sheet.skills).toHaveLength(17);
   } finally {
     teardown(el);
+  }
+});
+
+test("player não vê controles de ACL; GM escreve ACL", () => {
+  const player = setup({ authorPeerId: "peer-b", isGM: false });
+  try {
+    expect(player.el.querySelector(".creator-share")).toBeNull();
+  } finally {
+    teardown(player.el);
+  }
+  const gm = setup({ authorPeerId: "gm-1", isGM: true });
+  try {
+    expect(gm.el.querySelector(".creator-share")).not.toBeNull();
+    gm.el.querySelector<HTMLInputElement>(".creator-name")!.value = "NPC";
+    gm.el
+      .querySelector<HTMLInputElement>(".creator-public-view")!
+      .click();
+    gm.el.querySelector<HTMLButtonElement>(".creator-save")!.click();
+    expect(gm.saved[0].publicView).toBe(true);
+    expect(gm.saved[0].controllers).toContain("gm-1");
+  } finally {
+    teardown(gm.el);
   }
 });
 
