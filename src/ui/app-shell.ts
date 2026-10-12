@@ -17,6 +17,7 @@ import { tokenKey, type OfflineRoom } from "./room";
 import { eventToCell, renderMapView } from "./mapview";
 import { renderSheetPanel } from "./sheet-panel";
 import { createDicePanel } from "./dice-panel";
+import { createThreeDiceView, type ThreeDiceView } from "../dice/three-scene";
 import { createTokenBar, MEMBERS } from "./token-bar";
 
 /** Host-side backend: pushes local deltas, pulls the host snapshot. */
@@ -48,6 +49,8 @@ export interface AppShellDeps {
 export interface AppShell {
   /** Build (once) and show the table over the menu. */
   show(): void;
+  /** Release the 3D dice view and detach the table. */
+  dispose(): void;
 }
 
 /** Create the table shell; `show()` mounts it into the root. */
@@ -72,16 +75,24 @@ export function createAppShell(deps: AppShellDeps): AppShell {
     },
   });
 
+  // 3D dice mounted next to the numeric result: mirrors every resolved
+  // roll (face comes from the host via `resolveRoll`, never rolled here).
+  // Without a usable WebGL context the view stays numeric, so the text
+  // result above remains the source of truth.
+  const diceViewHost = document.createElement("div");
+  diceViewHost.className = "dice-3d-host";
+  let diceView: ThreeDiceView | null = createThreeDiceView(diceViewHost);
+
   const dice = createDicePanel({
     onRoll: (sides) => {
       const result = resolveRoll({ sides });
       const delta = publishRoll(result, `offline-${++session.rollSeq}`);
       publish(delta);
+      const frame = frameForResult(result);
       dice.setResult(
-        frameForResult(result)
-          .faces.map((f) => f.label)
-          .join(" ") + ` = ${result.total}`,
+        frame.faces.map((f) => f.label).join(" ") + ` = ${result.total}`,
       );
+      diceView?.show(frame);
     },
   });
 
@@ -131,6 +142,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
         const delta = publishRoll(result, `roll-${++session.rollSeq}`);
         publish(delta);
         dice.setResult(`${label}: ${result.rolls.join(" ")} = ${result.total}`);
+        diceView?.show(frameForResult(result));
       },
     });
     tokenBar.setSelected(selected, sheet);
@@ -159,7 +171,8 @@ export function createAppShell(deps: AppShellDeps): AppShell {
         wrap.style.padding = "16px";
         wrap.style.height = "100%";
 
-        side.append(tokenBar.el, sheetPanel, dice.el);
+        if (!diceView) diceView = createThreeDiceView(diceViewHost);
+        side.append(tokenBar.el, sheetPanel, dice.el, diceViewHost);
         wrap.append(canvas, side);
         appContent.appendChild(wrap);
         root.appendChild(appContent);
@@ -167,8 +180,17 @@ export function createAppShell(deps: AppShellDeps): AppShell {
 
         showSheet();
         draw();
+      } else if (!diceView) {
+        diceView = createThreeDiceView(diceViewHost);
+        if (!diceViewHost.isConnected) side.append(diceViewHost);
       }
       mounted.style.display = "";
+    },
+    dispose(): void {
+      diceView?.dispose();
+      diceView = null;
+      mounted?.remove();
+      mounted = null;
     },
   };
 }
