@@ -6,3 +6,22 @@ edition = "2021"
 [[bin]]
 name = "vtt-tauri"
 path = "src/main.rs"
+
+[lib]
+name = "vtt_tauri"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Default-off: `tauri`/`tauri-build` only resolve with network (crates.io
+# is unreachable from the dev sandbox, HTTP 403). Local `cargo test`
+# uses default features; CI builds `--features tauri-app`.
+tauri-app = ["dep:tauri", "dep:tauri-build"]
+
+[dependencies]
+rusqlite = { version = "0.40", features = ["bundled"] }
+tauri = { version = "2", optional = true }
+tokio = { version = "1", features = ["net", "rt", "rt-multi-thread", "macros", "io-util", "time"] }
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true }

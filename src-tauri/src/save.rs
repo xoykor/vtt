@@ -1,4 +1,4 @@
-//! Local save: snapshot file + JSON export (std only, hermetic).
+//! Local save: SQLite backend (rusqlite) + JSON export.
 //!
 //! `GameSave` carries the room id, the save version and the full
 //! `RoomState` partition (one JSON token per key, the same shape
@@ -7,13 +7,15 @@
 //! tokens never duplicate — the invariant `e2e/room.spec.ts` checks
 //! with 6 pieces.
 //!
-//! No `tauri`/`serde`/`rusqlite` crates yet (offline-friendly, same rule
-//! as `src-tauri/src/net/`): the file backend is a length-prefixed line
-//! format in `std::fs`, JSON uses a minimal structural parser in this
-//! module, and [`SCHEMA_SQL`] (+ the `*_sql` helpers) documents the exact
-//! SQLite mapping the `rusqlite` backend must implement — same tables and
-//! rows the file backend persists. Delete the file backend in favor of
-//! `rusqlite` when the Tauri bootstrap lands.
+//! The primary backend is SQLite ([`open`]/[`open_memory`]): every
+//! value travels as a bound parameter, never string-interpolated
+//! SQL. The phase-1 length-prefixed file backend stays readable
+//! for migration ([`migrate_file`] opens it or returns its
+//! readable error), and the JSON export/import in this module is
+//! unchanged — [`SCHEMA_SQL`] documents the exact SQLite mapping
+//! both backends persist. The `tauri` crate remains behind the
+//! default-off `tauri-app` feature (same rule as
+//! `src-tauri/src/net/`).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -21,15 +23,28 @@ use std::path::Path;
 /// Save format version written by this build.
 pub const SAVE_VERSION: &str = "1.0";
 
-/// SQLite schema the future `rusqlite` backend must implement.
+/// SQLite schema the `rusqlite` backend implements.
 ///
 /// `meta` holds one row per save (`room`, `version`); `state` holds one
-/// row per `RoomState` entry (token JSON per key). The file backend below
-/// persists exactly these rows; the SQL helpers emit the upserts.
+/// row per `RoomState` entry (token JSON per key). The SQLite backend
+/// below persists exactly these rows with bound parameters; the file
+/// backend persists the same rows in its length-prefixed format.
 pub const SCHEMA_SQL: &str = "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);\
      CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);";
 
 /// Quote a SQLite string literal by doubling single quotes.
+///
+/// # DO NOT EXECUTE
+///
+/// Documentation-only: the `rusqlite` backend binds parameters
+/// ([`save_to_db`]) instead of interpolating literals, so this
+/// helper must never be used to build SQL. Kept (and covered by
+/// tests) because it pins the exact quoting rule the SQL in
+/// [`SCHEMA_SQL`] documents.
+#[deprecated(
+    since = "0.1.0",
+    note = "doc-only DO NOT EXECUTE: the rusqlite backend binds parameters"
+)]
 pub fn sql_quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
@@ -44,7 +59,17 @@ pub fn sql_quote(s: &str) -> String {
     out
 }
 
-/// Upsert the save metadata the `rusqlite` backend must execute.
+/// Upsert the save metadata the `rusqlite` backend executes.
+///
+/// # DO NOT EXECUTE
+///
+/// Documentation-only: [`save_to_db`] binds parameters instead of
+/// interpolating literals, so this helper must never build SQL.
+#[deprecated(
+    since = "0.1.0",
+    note = "doc-only DO NOT EXECUTE: the rusqlite backend binds parameters"
+)]
+#[allow(deprecated)] // builds on sql_quote, itself doc-only
 pub fn meta_upsert_sql(key: &str, value: &str) -> String {
     format!(
         "INSERT INTO meta (key, value) VALUES ({}, {}) \
@@ -54,7 +79,17 @@ pub fn meta_upsert_sql(key: &str, value: &str) -> String {
     )
 }
 
-/// Upsert one `RoomState` entry the `rusqlite` backend must execute.
+/// Upsert one `RoomState` entry the `rusqlite` backend executes.
+///
+/// # DO NOT EXECUTE
+///
+/// Documentation-only: [`save_to_db`] binds parameters instead of
+/// interpolating literals, so this helper must never build SQL.
+#[deprecated(
+    since = "0.1.0",
+    note = "doc-only DO NOT EXECUTE: the rusqlite backend binds parameters"
+)]
+#[allow(deprecated)] // builds on sql_quote, itself doc-only
 pub fn state_upsert_sql(key: &str, value: &str) -> String {
     format!(
         "INSERT INTO state (key, value) VALUES ({}, {}) \
@@ -93,13 +128,131 @@ pub fn restore(save: &GameSave) -> BTreeMap<String, String> {
     save.state.clone()
 }
 
-// --- File backend (length-prefixed, binary-safe) --------------------------
+// --- SQLite backend (rusqlite, bound parameters) ----------------------
+//
+//   meta:  (room, ...) (version, ...)   one row per save
+//   state: (key, value)                 one row per RoomState entry
+
+use rusqlite::{params, Connection};
+
+/// Open (or create) the save database at `path`, schema applied.
+pub fn open(path: &Path) -> Result<Connection, String> {
+    let db = Connection::open(path).map_err(|e| format!("open failed: {e}"))?;
+    init_schema(&db)?;
+    Ok(db)
+}
+
+/// Open an in-memory database (schema applied); never touches disk.
+pub fn open_memory() -> Result<Connection, String> {
+    let db =
+        Connection::open_in_memory().map_err(|e| format!("open failed: {e}"))?;
+    init_schema(&db)?;
+    Ok(db)
+}
+
+/// Apply [`SCHEMA_SQL`]; idempotent (`CREATE TABLE IF NOT EXISTS`).
+fn init_schema(db: &Connection) -> Result<(), String> {
+    db.execute_batch(SCHEMA_SQL).map_err(|e| format!("schema failed: {e}"))
+}
+
+/// Persist `save` in one transaction.
+///
+/// Every value travels as a bound parameter (`params![...]`) —
+/// never string-interpolated SQL. The `state` rows are replaced
+/// wholesale (a smaller snapshot drops deleted keys, matching
+/// the file backend's truncate-and-rewrite), and the `meta` rows
+/// (`room`, `version`) are upserted.
+pub fn save_to_db(db: &mut Connection, save: &GameSave) -> Result<(), String> {
+    let tx = db.transaction().map_err(|e| format!("save failed: {e}"))?;
+    for (key, value) in [("room", save.room.as_str()), ("version", save.version.as_str())] {
+        tx.execute(
+            "INSERT INTO meta (key, value) VALUES (?1, ?2) \
+             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )
+        .map_err(|e| format!("save failed: {e}"))?;
+    }
+    tx.execute("DELETE FROM state", [])
+        .map_err(|e| format!("save failed: {e}"))?;
+    for (key, value) in &save.state {
+        tx.execute(
+            "INSERT INTO state (key, value) VALUES (?1, ?2)",
+            params![key.as_str(), value.as_str()],
+        )
+        .map_err(|e| format!("save failed: {e}"))?;
+    }
+    tx.commit().map_err(|e| format!("save failed: {e}"))
+}
+
+/// Load the full save from the database; validates the version.
+pub fn load_from_db(db: &Connection) -> Result<GameSave, String> {
+    let room = meta_value(db, "room")?;
+    let version = meta_value(db, "version")?;
+    if version != SAVE_VERSION {
+        return Err(format!("version mismatch: save={version} expected={SAVE_VERSION}"));
+    }
+    if room.is_empty() {
+        return Err("missing field: room".to_string());
+    }
+    let state = restore_all(db)?;
+    Ok(GameSave {
+        room,
+        version,
+        state,
+    })
+}
+
+/// Read one `meta` row; readable error when absent.
+fn meta_value(db: &Connection, key: &str) -> Result<String, String> {
+    db.query_row(
+        "SELECT value FROM meta WHERE key = ?1",
+        params![key],
+        |row| row.get::<_, String>(0),
+    )
+    .map_err(|_| format!("missing field: {key}"))
+}
+
+/// Restore every `state` row — the wholesale snapshot body.
+pub fn restore_all(db: &Connection) -> Result<BTreeMap<String, String>, String> {
+    let mut stmt = db
+        .prepare("SELECT key, value FROM state")
+        .map_err(|e| format!("restore failed: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|e| format!("restore failed: {e}"))?;
+    let mut state = BTreeMap::new();
+    for row in rows {
+        let (key, value) = row.map_err(|e| format!("restore failed: {e}"))?;
+        state.insert(key, value);
+    }
+    Ok(state)
+}
+
+/// Migrate a phase-1 save file into the SQLite backend.
+///
+/// The file either opens — its rows land in `db` inside one
+/// transaction — or the original readable error is returned:
+/// garbage, truncation and version mismatches never migrate.
+pub fn migrate_file(path: &Path, db: &mut Connection) -> Result<GameSave, String> {
+    let save = load_from_file(path)?;
+    save_to_db(db, &save)?;
+    Ok(save)
+}
+
+// --- File backend (phase-1 format, kept for migration) ----------------
 //
 //   vtt-save/1\n
 //   room <len>\n<room bytes>\n
 //   save-version <len>\n<version bytes>\n
 //   entries <n>\n
 //   key <klen> value <vlen>\n<key bytes>\n<value bytes>\n   (× n)
+//
+// Still opens (readable errors for garbage, truncation and
+// version mismatches) so [`migrate_file`] can move phase-1
+// saves into the SQLite backend. New code should use
+// [`open`]/[`open_memory`] + [`save_to_db`].
 
 const FILE_MAGIC: &str = "vtt-save/1";
 
@@ -604,6 +757,7 @@ pub fn import_json(json: &str) -> Result<GameSave, String> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // sql_quote / *_sql are doc-only (DO NOT EXECUTE)
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
