@@ -1,29 +1,41 @@
-// Roll20-style character sheet panel (right sidebar): portrait upload,
-// editable abilities/skills/saves with one-click d20 rolls, inventory,
-// traits, conditions and notes. Pure DOM; every edit fires `onChange`
-// with the full updated sheet (the caller decides persistence). Rolls
-// go through `onRoll` so the caller can publish them host-side.
-// No central server; no WotC art.
+// Roll20-style character sheet panel (right sidebar): tabbed layout
+// (Core | Bio | Magias/Equip) with a Roll20 header (name, class, level,
+// race, alignment, XP), portrait upload, editable abilities/skills/saves
+// with one-click d20 rolls, attacks, spells/slots, inventory, money,
+// traits, languages, conditions and notes. Pure DOM; every edit fires
+// `onChange` with the full updated sheet (the caller decides
+// persistence). Rolls go through `onRoll` so the caller can publish
+// them host-side, and the last roll renders inline with crit/fumble
+// highlight. No central server; no WotC art.
 
-import { resolveRoll, type RollResult } from "../dice/roller";
+import { resolveRoll, type RngLike, type RollResult } from "../dice/roller";
+import { profBonusForLevel } from "../sheet/level";
+import { rollRequest } from "../sheet/srd";
+import { abilityMod, initiativeTotal, modText } from "../sheet/stats";
 import type {
   AbilityScores,
+  Attack,
   Condition,
   InventoryItem,
+  Money,
   Save,
   Sheet,
   SheetTraits,
   Skill,
+  Spell,
+  SpellSlot,
 } from "../sheet/types";
 
 export interface SheetPanelCallbacks {
   /** Fired on every edit with the full updated sheet. */
   onChange: (sheet: Sheet) => void;
-  /** Fired on a direct roll (ability/save/skill) with the resolved result. */
+  /** Fired on a direct roll (ability/save/skill/attack) with the resolved result. */
   onRoll?: (label: string, result: RollResult) => void;
+  /** Entropy for direct rolls (defaults to Math.random; tests inject a stub). */
+  rng?: RngLike;
 }
 
-const ABILITY_LABELS: Record<keyof AbilityScores, string> = {
+export const ABILITY_LABELS: Record<keyof AbilityScores, string> = {
   str: "FOR",
   dex: "DES",
   con: "CON",
@@ -32,7 +44,7 @@ const ABILITY_LABELS: Record<keyof AbilityScores, string> = {
   cha: "CAR",
 };
 
-const ABILITY_ORDER: (keyof AbilityScores)[] = [
+export const ABILITY_ORDER: (keyof AbilityScores)[] = [
   "str",
   "dex",
   "con",
@@ -41,7 +53,7 @@ const ABILITY_ORDER: (keyof AbilityScores)[] = [
   "cha",
 ];
 
-const DEFAULT_ABILITIES: AbilityScores = {
+export const DEFAULT_ABILITIES: AbilityScores = {
   str: 10,
   dex: 10,
   con: 10,
@@ -57,8 +69,10 @@ const DEFAULT_TRAITS: SheetTraits = {
   flaws: "",
 };
 
+const DEFAULT_MONEY: Money = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
+
 /** Standard 5e skills (Portuguese) with their governing ability. */
-const DEFAULT_SKILLS: ReadonlyArray<{
+export const DEFAULT_SKILLS: ReadonlyArray<{
   name: string;
   ability: keyof AbilityScores;
 }> = [
@@ -80,16 +94,6 @@ const DEFAULT_SKILLS: ReadonlyArray<{
   { name: "Furtividade", ability: "dex" },
   { name: "Sobrevivência", ability: "wis" },
 ];
-
-const PROF_BONUS = 2;
-
-function abilityMod(score: number): number {
-  return Math.floor((score - 10) / 2);
-}
-
-function modText(mod: number): string {
-  return mod >= 0 ? `+${mod}` : `${mod}`;
-}
 
 function slugify(name: string): string {
   return name
@@ -143,10 +147,29 @@ export function renderSheetPanel(
     onChange(draft);
   }
 
-  /** Direct d20 roll: resolved host-side by the caller. */
+  /** Proficiency follows the level (legacy sheets without a level keep theirs). */
+  function liveProf(): number {
+    if (current.level !== undefined) return profBonusForLevel(current.level);
+    return current.profBonus ?? 2;
+  }
+
+  /** Last-roll readout (crit 20 / fumble 1 highlighted). */
+  const rollLine = el("div", "sheet-roll-line");
+
+  /** Direct d20 roll: normalized via rollRequest, resolved, published by the caller. */
   function roll(mod: number, label: string): void {
-    if (!callbacks.onRoll) return;
-    callbacks.onRoll(label, resolveRoll({ sides: 20, mod }));
+    const result = resolveRoll(
+      rollRequest({ sides: 20, mod }),
+      callbacks.rng ?? Math.random,
+    );
+    callbacks.onRoll?.(label, result);
+    const face = result.rolls[0] ?? 0;
+    const tag =
+      face === 20 ? " — CRÍTICO!" : face === 1 ? " — FALHA CRÍTICA!" : "";
+    rollLine.textContent = `${label}: ${face} ${modText(mod)} = ${result.total}${tag}`;
+    rollLine.className =
+      "sheet-roll-line show" +
+      (face === 20 ? " crit" : face === 1 ? " fumble" : "");
   }
 
   /** Current live value of an ability input (falls back to default). */
@@ -166,9 +189,9 @@ export function renderSheetPanel(
   const abilityInputs = new Map<keyof AbilityScores, HTMLInputElement>();
 
   const panel = el("div", "sheet-panel");
-  panel.append(el("h2", "sheet-title", "Ficha"));
+  panel.append(el("h2", "sheet-title", "Ficha"), rollLine);
 
-  // ── Header: portrait + name + HP/AC ──
+  // ── Header: portrait + identity (Roll20: name/class/level/race/alignment/XP) ──
   const header = el("div", "sheet-header");
 
   const photoLabel = document.createElement("label");
@@ -219,11 +242,132 @@ export function renderSheetPanel(
   });
   header.appendChild(nameInput);
 
-  const stats = el("div", "sheet-stats");
-  const statDefs: Array<{ label: string; value: number; key: "hp" | "maxHp" | "ac" }> = [
+  const identity = el("div", "sheet-identity");
+  const classInput = document.createElement("input");
+  classInput.className = "sheet-class";
+  classInput.value = sheet.charClass ?? "";
+  classInput.placeholder = "Classe";
+  classInput.title = "Classe";
+  classInput.addEventListener("input", () => {
+    update((draft) => {
+      draft.charClass = classInput.value;
+    });
+  });
+  const levelInput = document.createElement("input");
+  levelInput.type = "number";
+  levelInput.className = "sheet-level";
+  levelInput.value = String(sheet.level ?? 1);
+  levelInput.min = "1";
+  levelInput.max = "20";
+  levelInput.title = "Nível";
+  const raceInput = document.createElement("input");
+  raceInput.className = "sheet-race";
+  raceInput.value = sheet.race ?? "";
+  raceInput.placeholder = "Raça";
+  raceInput.title = "Raça";
+  raceInput.addEventListener("input", () => {
+    update((draft) => {
+      draft.race = raceInput.value;
+    });
+  });
+  const alignInput = document.createElement("input");
+  alignInput.className = "sheet-alignment";
+  alignInput.value = sheet.alignment ?? "";
+  alignInput.placeholder = "Alinhamento";
+  alignInput.title = "Alinhamento";
+  alignInput.addEventListener("input", () => {
+    update((draft) => {
+      draft.alignment = alignInput.value;
+    });
+  });
+  const xpInput = document.createElement("input");
+  xpInput.type = "number";
+  xpInput.className = "sheet-xp";
+  xpInput.value = String(sheet.xp ?? 0);
+  xpInput.min = "0";
+  xpInput.title = "XP";
+  xpInput.addEventListener("input", () => {
+    const v = Number(xpInput.value);
+    if (!Number.isFinite(v)) return;
+    update((draft) => {
+      draft.xp = Math.max(0, Math.floor(v));
+    });
+  });
+  identity.append(classInput, levelInput, raceInput, alignInput, xpInput);
+  header.appendChild(identity);
+  panel.appendChild(header);
+
+  /** Refresh save/skill modifiers plus combat readouts after a change. */
+  function refreshDerived(changedAbility?: keyof AbilityScores): void {
+    for (const dep of dependents) {
+      if (changedAbility !== undefined && dep.ability !== changedAbility) {
+        continue;
+      }
+      dep.modSpan.textContent = modText(
+        abilityMod(liveScore(dep.ability)) +
+          (dep.prof.checked ? liveProf() : 0),
+      );
+    }
+    profOut.textContent = modText(liveProf());
+    initOut.textContent = modText(
+      initiativeTotal(liveScore("dex"), liveInitMisc()),
+    );
+  }
+
+  levelInput.addEventListener("input", () => {
+    const v = Number(levelInput.value);
+    if (!Number.isFinite(v)) return;
+    const level = Math.min(20, Math.max(1, Math.floor(v)));
+    update((draft) => {
+      draft.level = level;
+      draft.profBonus = profBonusForLevel(level);
+    });
+    refreshDerived();
+  });
+
+  // ── Tabs: Core | Bio | Magias/Equip ──
+  const tabs = el("div", "sheet-tabs");
+  const tabPanels = new Map<string, HTMLElement>();
+  for (const [id, label] of [
+    ["core", "Core"],
+    ["bio", "Bio"],
+    ["spells", "Magias/Equip"],
+  ] as const) {
+    const btn = el("button", "sheet-tab" + (id === "core" ? " active" : ""), label);
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      for (const [panelId, panelEl] of tabPanels) {
+        panelEl.style.display = panelId === id ? "" : "none";
+      }
+      for (const other of tabs.querySelectorAll(".sheet-tab")) {
+        other.classList.toggle("active", other === btn);
+      }
+    });
+    tabs.appendChild(btn);
+    const tabPanel = el("div", "sheet-tab-panel");
+    tabPanel.dataset.tabPanel = id;
+    tabPanel.style.display = id === "core" ? "" : "none";
+    tabPanels.set(id, tabPanel);
+    panel.appendChild(tabPanel);
+  }
+  // Tabs sit right under the header: move them before the panels.
+  const corePanel = tabPanels.get("core")!;
+  const bioPanel = tabPanels.get("bio")!;
+  const spellsPanel = tabPanels.get("spells")!;
+  panel.insertBefore(tabs, corePanel);
+
+  // ── Core: combate ──
+  const combat = section("Combate");
+  const combatGrid = el("div", "sheet-combat-grid");
+  const statDefs: Array<{
+    label: string;
+    value: number;
+    key: "hp" | "maxHp" | "ac" | "tempHp";
+  }> = [
     { label: "HP", value: sheet.hp, key: "hp" },
     { label: "HP Máx", value: sheet.maxHp, key: "maxHp" },
     { label: "CA", value: sheet.ac, key: "ac" },
+    { label: "Temp", value: sheet.tempHp ?? 0, key: "tempHp" },
   ];
   for (const def of statDefs) {
     const wrap = el("label", "sheet-stat");
@@ -239,10 +383,121 @@ export function renderSheetPanel(
       });
     });
     wrap.appendChild(input);
-    stats.appendChild(wrap);
+    combatGrid.appendChild(wrap);
   }
-  header.appendChild(stats);
-  panel.appendChild(header);
+  combat.appendChild(combatGrid);
+
+  const combatRows = el("div", "sheet-combat-rows");
+  const inspLabel = el("label", "sheet-check-row");
+  const inspCheck = document.createElement("input");
+  inspCheck.type = "checkbox";
+  inspCheck.className = "sheet-inspiration";
+  inspCheck.checked = sheet.inspiration ?? false;
+  inspCheck.addEventListener("change", () => {
+    update((draft) => {
+      draft.inspiration = inspCheck.checked;
+    });
+  });
+  inspLabel.append(inspCheck, el("span", "sheet-check-name", "Inspiração"));
+  combatRows.appendChild(inspLabel);
+
+  const speedLabel = el("label", "sheet-inline-field");
+  speedLabel.append(el("span", "sheet-field-label", "Desloc. (m)"));
+  const speedInput = document.createElement("input");
+  speedInput.type = "number";
+  speedInput.className = "sheet-speed";
+  speedInput.value = String(sheet.speed ?? 9);
+  speedInput.min = "0";
+  speedInput.addEventListener("input", () => {
+    const v = Number(speedInput.value);
+    if (!Number.isFinite(v)) return;
+    update((draft) => {
+      draft.speed = v;
+    });
+  });
+  speedLabel.appendChild(speedInput);
+  combatRows.appendChild(speedLabel);
+
+  const initWrap = el("div", "sheet-inline-field");
+  const initBtn = el("button", "sheet-init-btn", "Iniciativa");
+  initBtn.type = "button";
+  initBtn.title = "Rolar iniciativa (d20 + DES + extra)";
+  const initOut = el("span", "sheet-initiative", "");
+  const initMisc = document.createElement("input");
+  initMisc.type = "number";
+  initMisc.className = "sheet-init-misc";
+  initMisc.value = String(sheet.initiativeMisc ?? 0);
+  initMisc.title = "Bônus extra de iniciativa";
+  initBtn.addEventListener("click", () => {
+    roll(
+      initiativeTotal(liveScore("dex"), liveInitMisc()),
+      "Iniciativa",
+    );
+  });
+  initWrap.append(initBtn, initOut, initMisc);
+  combatRows.appendChild(initWrap);
+
+  const profWrap = el("div", "sheet-inline-field");
+  profWrap.append(el("span", "sheet-field-label", "Proficiência"));
+  const profOut = el("span", "sheet-prof-bonus", modText(liveProf()));
+  profWrap.appendChild(profOut);
+  combatRows.appendChild(profWrap);
+  combat.appendChild(combatRows);
+
+  // Death saves: three successes vs three failures.
+  const deathWrap = el("div", "sheet-death-saves");
+  deathWrap.append(el("span", "sheet-field-label", "Testes de morte"));
+  const deathGroups = el("div", "sheet-death-groups");
+  const deathChecks: HTMLInputElement[] = [];
+  for (const [kind, count] of [["success", 3], ["failure", 3]] as const) {
+    const group = el("div", `sheet-death-group sheet-death-${kind}`);
+    group.append(
+      el("span", "sheet-death-label", kind === "success" ? "✓" : "✕"),
+    );
+    const saved =
+      kind === "success"
+        ? (sheet.deathSaves?.successes ?? 0)
+        : (sheet.deathSaves?.failures ?? 0);
+    for (let i = 0; i < count; i++) {
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = i < saved;
+      check.title = kind === "success" ? "Sucesso" : "Falha";
+      check.addEventListener("change", () => {
+        const succ = deathChecks
+          .slice(0, 3)
+          .filter((c) => c.checked).length;
+        const fail = deathChecks.slice(3).filter((c) => c.checked).length;
+        update((draft) => {
+          draft.deathSaves = { successes: succ, failures: fail };
+        });
+      });
+      deathChecks.push(check);
+      group.appendChild(check);
+    }
+    deathGroups.appendChild(group);
+  }
+  deathWrap.appendChild(deathGroups);
+  combat.appendChild(deathWrap);
+  corePanel.appendChild(combat);
+
+  function liveInitMisc(): number {
+    const v = Number(initMisc.value);
+    return Number.isFinite(v) ? v : 0;
+  }
+  initMisc.addEventListener("input", () => {
+    const v = Number(initMisc.value);
+    if (!Number.isFinite(v)) return;
+    update((draft) => {
+      draft.initiativeMisc = v;
+    });
+    initOut.textContent = modText(
+      initiativeTotal(liveScore("dex"), liveInitMisc()),
+    );
+  });
+  initOut.textContent = modText(
+    initiativeTotal(liveScore("dex"), liveInitMisc()),
+  );
 
   // ── Atributos ──
   const abilitiesSection = section("Atributos");
@@ -265,12 +520,7 @@ export function renderSheetPanel(
       if (!Number.isFinite(v)) return;
       modSpan.textContent = modText(abilityMod(v));
       // Refresh save/skill modifiers that depend on this ability.
-      for (const dep of dependents) {
-        if (dep.ability !== key) continue;
-        dep.modSpan.textContent = modText(
-          abilityMod(liveScore(key)) + (dep.prof.checked ? PROF_BONUS : 0),
-        );
-      }
+      refreshDerived(key);
       update((draft) => {
         draft.abilities = { ...(draft.abilities ?? { ...DEFAULT_ABILITIES }), [key]: v };
       });
@@ -283,7 +533,7 @@ export function renderSheetPanel(
     abGrid.appendChild(card);
   }
   abilitiesSection.appendChild(abGrid);
-  panel.appendChild(abilitiesSection);
+  corePanel.appendChild(abilitiesSection);
 
   // ── Salvamentos ──
   const savesSection = section("Salvamentos");
@@ -303,11 +553,11 @@ export function renderSheetPanel(
     const modSpan = el("span", "sheet-row-mod", "");
     dependents.push({ ability: save.ability, prof, modSpan });
     modSpan.textContent = modText(
-      abilityMod(liveScore(save.ability)) + (prof.checked ? PROF_BONUS : 0),
+      abilityMod(liveScore(save.ability)) + (prof.checked ? liveProf() : 0),
     );
     prof.addEventListener("change", () => {
       modSpan.textContent = modText(
-        abilityMod(liveScore(save.ability)) + (prof.checked ? PROF_BONUS : 0),
+        abilityMod(liveScore(save.ability)) + (prof.checked ? liveProf() : 0),
       );
       update((draft) => {
         draft.saves = (
@@ -324,14 +574,14 @@ export function renderSheetPanel(
     );
     row.addEventListener("click", () => {
       roll(
-        abilityMod(liveScore(save.ability)) + (prof.checked ? PROF_BONUS : 0),
+        abilityMod(liveScore(save.ability)) + (prof.checked ? liveProf() : 0),
         `Salvamento de ${ABILITY_LABELS[save.ability]}`,
       );
     });
     savesList.appendChild(row);
   }
   savesSection.appendChild(savesList);
-  panel.appendChild(savesSection);
+  corePanel.appendChild(savesSection);
 
   // ── Perícias ──
   const skillsSection = section("Perícias");
@@ -352,11 +602,11 @@ export function renderSheetPanel(
     const modSpan = el("span", "sheet-row-mod", "");
     dependents.push({ ability: skill.ability, prof, modSpan });
     modSpan.textContent = modText(
-      abilityMod(liveScore(skill.ability)) + (prof.checked ? PROF_BONUS : 0),
+      abilityMod(liveScore(skill.ability)) + (prof.checked ? liveProf() : 0),
     );
     prof.addEventListener("change", () => {
       modSpan.textContent = modText(
-        abilityMod(liveScore(skill.ability)) + (prof.checked ? PROF_BONUS : 0),
+        abilityMod(liveScore(skill.ability)) + (prof.checked ? liveProf() : 0),
       );
       update((draft) => {
         draft.skills = (
@@ -372,80 +622,109 @@ export function renderSheetPanel(
     );
     row.addEventListener("click", () => {
       roll(
-        abilityMod(liveScore(skill.ability)) + (prof.checked ? PROF_BONUS : 0),
+        abilityMod(liveScore(skill.ability)) + (prof.checked ? liveProf() : 0),
         skill.name,
       );
     });
     skillsList.appendChild(row);
   }
   skillsSection.appendChild(skillsList);
-  panel.appendChild(skillsSection);
+  corePanel.appendChild(skillsSection);
 
-  // ── Inventário ──
-  const invSection = section("Inventário");
-  const invList = el("div", "sheet-list");
+  // ── Ataques ──
+  const atkSection = section("Ataques");
+  const atkList = el("div", "sheet-list");
 
-  /** One editable inventory row (name + qty + delete). */
-  function inventoryRow(item: InventoryItem): HTMLElement {
-    const row = el("div", "sheet-row sheet-row-edit");
-    const rowName = document.createElement("input");
-    rowName.value = item.name;
-    rowName.className = "sheet-row-input";
-    rowName.placeholder = "Item";
-    rowName.addEventListener("input", () => {
+  /** One attack row: roll button + editable name/bonus/damage + delete. */
+  function attackRow(attack: Attack): HTMLElement {
+    const row = el("button", "sheet-row attack-row");
+    row.type = "button";
+    row.title = `Rolar ataque (${attack.damage})`;
+    const nameIn = document.createElement("input");
+    nameIn.value = attack.name;
+    nameIn.className = "attack-name";
+    nameIn.placeholder = "Ataque";
+    nameIn.addEventListener("click", (ev) => ev.stopPropagation());
+    nameIn.addEventListener("input", () => {
       update((draft) => {
-        draft.inventory = (draft.inventory ?? []).map((i) =>
-          i.id === item.id ? { ...i, name: rowName.value } : i,
+        draft.attacks = (draft.attacks ?? []).map((a) =>
+          a.id === attack.id ? { ...a, name: nameIn.value } : a,
         );
       });
     });
-    const rowQty = document.createElement("input");
-    rowQty.type = "number";
-    rowQty.value = String(item.qty);
-    rowQty.className = "sheet-row-input sheet-row-qty";
-    rowQty.title = "Quantidade";
-    rowQty.addEventListener("input", () => {
-      const v = Number(rowQty.value);
+    const bonusIn = document.createElement("input");
+    bonusIn.type = "number";
+    bonusIn.value = String(attack.bonus);
+    bonusIn.className = "attack-bonus";
+    bonusIn.title = "Bônus de ataque";
+    bonusIn.addEventListener("click", (ev) => ev.stopPropagation());
+    bonusIn.addEventListener("input", () => {
+      const v = Number(bonusIn.value);
       if (!Number.isFinite(v)) return;
       update((draft) => {
-        draft.inventory = (draft.inventory ?? []).map((i) =>
-          i.id === item.id ? { ...i, qty: v } : i,
+        draft.attacks = (draft.attacks ?? []).map((a) =>
+          a.id === attack.id ? { ...a, bonus: v } : a,
         );
       });
     });
-    const rowDel = el("button", "sheet-row-del", "✕");
-    rowDel.type = "button";
-    rowDel.title = "Remover item";
-    rowDel.addEventListener("click", () => {
+    const dmgIn = document.createElement("input");
+    dmgIn.value = attack.damage;
+    dmgIn.className = "attack-damage";
+    dmgIn.placeholder = "1d8+3";
+    dmgIn.title = "Dano";
+    dmgIn.addEventListener("click", (ev) => ev.stopPropagation());
+    dmgIn.addEventListener("input", () => {
       update((draft) => {
-        draft.inventory = (draft.inventory ?? []).filter((i) => i.id !== item.id);
+        draft.attacks = (draft.attacks ?? []).map((a) =>
+          a.id === attack.id ? { ...a, damage: dmgIn.value } : a,
+        );
+      });
+    });
+    const del = el("button", "attack-del", "✕");
+    del.type = "button";
+    del.title = "Remover ataque";
+    del.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      update((draft) => {
+        draft.attacks = (draft.attacks ?? []).filter((a) => a.id !== attack.id);
       });
       row.remove();
     });
-    row.append(rowName, rowQty, rowDel);
+    const modSpan = el("span", "sheet-row-mod", modText(attack.bonus));
+    bonusIn.addEventListener("input", () => {
+      const v = Number(bonusIn.value);
+      if (Number.isFinite(v)) modSpan.textContent = modText(v);
+    });
+    row.append(nameIn, bonusIn, dmgIn, modSpan, del);
+    row.addEventListener("click", () => {
+      roll(Number(bonusIn.value) || 0, attack.name || "Ataque");
+    });
     return row;
   }
 
-  const items: InventoryItem[] = sheet.inventory ?? [];
-  for (const item of items) {
-    invList.appendChild(inventoryRow(item));
+  for (const attack of sheet.attacks ?? []) {
+    atkList.appendChild(attackRow(attack));
   }
-  const addItem = el("button", "sheet-add sheet-add-item", "+ Adicionar item");
-  addItem.type = "button";
-  addItem.addEventListener("click", () => {
-    const item: InventoryItem = { id: newId(), name: "Novo item", qty: 1 };
+  const addAtk = el("button", "sheet-add sheet-add-attack", "+ Adicionar ataque");
+  addAtk.type = "button";
+  addAtk.addEventListener("click", () => {
+    const attack: Attack = {
+      id: newId(),
+      name: "Novo ataque",
+      bonus: liveProf() + abilityMod(liveScore("str")),
+      damage: "1d6",
+    };
     update((draft) => {
-      draft.inventory = [...(draft.inventory ?? []), item];
+      draft.attacks = [...(draft.attacks ?? []), attack];
     });
-    // Show the editable row right away (no re-render, keeps focus).
-    const added = inventoryRow(item);
-    invList.appendChild(added);
-    added.querySelector<HTMLInputElement>(".sheet-row-input")?.focus();
+    const added = attackRow(attack);
+    atkList.appendChild(added);
+    added.querySelector<HTMLInputElement>(".attack-name")?.focus();
   });
-  invSection.append(invList, addItem);
-  panel.appendChild(invSection);
+  atkSection.append(atkList, addAtk);
+  corePanel.appendChild(atkSection);
 
-  // ── Traços ──
+  // ── Bio: traços ──
   const traitsSection = section("Traços");
   const traits: SheetTraits = sheet.traits ?? { ...DEFAULT_TRAITS };
   const traitFields: Array<[keyof SheetTraits, string, string]> = [
@@ -455,8 +734,8 @@ export function renderSheetPanel(
     ["flaws", "Defeitos", "Defeitos e fraquezas"],
   ];
   for (const [key, label, placeholder] of traitFields) {
-    const field = el("label", "sheet-field");
-    field.append(el("span", "sheet-field-label", label));
+    const fieldEl = el("label", "sheet-field");
+    fieldEl.append(el("span", "sheet-field-label", label));
     const input = document.createElement("input");
     input.value = traits[key];
     input.placeholder = placeholder;
@@ -465,12 +744,40 @@ export function renderSheetPanel(
         draft.traits = { ...(draft.traits ?? { ...DEFAULT_TRAITS }), [key]: input.value };
       });
     });
-    field.appendChild(input);
-    traitsSection.appendChild(field);
+    fieldEl.appendChild(input);
+    traitsSection.appendChild(fieldEl);
   }
-  panel.appendChild(traitsSection);
+  bioPanel.appendChild(traitsSection);
 
-  // ── Condicionais ──
+  // ── Bio: idiomas + história ──
+  const langSection = section("Idiomas");
+  const langInput = document.createElement("input");
+  langInput.className = "sheet-language";
+  langInput.value = sheet.languages ?? "";
+  langInput.placeholder = "Comum, Élfico...";
+  langInput.addEventListener("input", () => {
+    update((draft) => {
+      draft.languages = langInput.value;
+    });
+  });
+  langSection.appendChild(langInput);
+  bioPanel.appendChild(langSection);
+
+  const storySection = section("História");
+  const story = document.createElement("textarea");
+  story.className = "sheet-backstory";
+  story.value = sheet.backstory ?? "";
+  story.rows = 5;
+  story.placeholder = "História do personagem...";
+  story.addEventListener("input", () => {
+    update((draft) => {
+      draft.backstory = story.value;
+    });
+  });
+  storySection.appendChild(story);
+  bioPanel.appendChild(storySection);
+
+  // ── Bio: condições ──
   const condSection = section("Condições");
   const condList = el("div", "sheet-list");
 
@@ -540,9 +847,9 @@ export function renderSheetPanel(
     added.querySelector<HTMLInputElement>(".sheet-row-input")?.focus();
   });
   condSection.append(condList, addCond);
-  panel.appendChild(condSection);
+  bioPanel.appendChild(condSection);
 
-  // ── Anotações ──
+  // ── Bio: anotações ──
   const notesSection = section("Anotações");
   const notes = document.createElement("textarea");
   notes.className = "sheet-notes";
@@ -555,7 +862,241 @@ export function renderSheetPanel(
     });
   });
   notesSection.appendChild(notes);
-  panel.appendChild(notesSection);
+  bioPanel.appendChild(notesSection);
+
+  // ── Magias/Equip: magias ──
+  const spellsSection = section("Magias");
+  const spellsList = el("div", "sheet-list");
+
+  /** One editable spell row (name + level + delete). */
+  function spellRow(spell: Spell): HTMLElement {
+    const row = el("div", "sheet-row sheet-row-edit");
+    const nameIn = document.createElement("input");
+    nameIn.value = spell.name;
+    nameIn.className = "spell-name";
+    nameIn.placeholder = "Magia";
+    nameIn.addEventListener("input", () => {
+      update((draft) => {
+        draft.spells = (draft.spells ?? []).map((s) =>
+          s.id === spell.id ? { ...s, name: nameIn.value } : s,
+        );
+      });
+    });
+    const levelIn = document.createElement("input");
+    levelIn.type = "number";
+    levelIn.value = String(spell.level);
+    levelIn.min = "0";
+    levelIn.max = "9";
+    levelIn.className = "spell-level";
+    levelIn.title = "Nível (0 = truque)";
+    levelIn.addEventListener("input", () => {
+      const v = Number(levelIn.value);
+      if (!Number.isFinite(v)) return;
+      update((draft) => {
+        draft.spells = (draft.spells ?? []).map((s) =>
+          s.id === spell.id ? { ...s, level: Math.max(0, Math.floor(v)) } : s,
+        );
+      });
+    });
+    const del = el("button", "spell-del", "✕");
+    del.type = "button";
+    del.title = "Remover magia";
+    del.addEventListener("click", () => {
+      update((draft) => {
+        draft.spells = (draft.spells ?? []).filter((s) => s.id !== spell.id);
+      });
+      row.remove();
+    });
+    row.append(nameIn, levelIn, del);
+    return row;
+  }
+
+  for (const spell of sheet.spells ?? []) {
+    spellsList.appendChild(spellRow(spell));
+  }
+  const addSpell = el("button", "sheet-add sheet-add-spell", "+ Adicionar magia");
+  addSpell.type = "button";
+  addSpell.addEventListener("click", () => {
+    const spell: Spell = { id: newId(), name: "Nova magia", level: 1 };
+    update((draft) => {
+      draft.spells = [...(draft.spells ?? []), spell];
+    });
+    const added = spellRow(spell);
+    spellsList.appendChild(added);
+    added.querySelector<HTMLInputElement>(".spell-name")?.focus();
+  });
+
+  const slotsSection = section("Slots de magia");
+  const slotsList = el("div", "sheet-list");
+
+  /** Local slot objects (no ids): rows mutate their own entry in place. */
+  let slots: SpellSlot[] = (sheet.spellSlots ?? []).map((s) => ({ ...s }));
+
+  function pushSlots(): void {
+    const snapshot = slots.map((s) => ({ ...s }));
+    update((draft) => {
+      draft.spellSlots = snapshot;
+    });
+  }
+
+  /** One spell-slot row (level + total + used + delete). */
+  function slotRow(slot: SpellSlot): HTMLElement {
+    const row = el("div", "sheet-row sheet-row-edit");
+    const levelIn = document.createElement("input");
+    levelIn.type = "number";
+    levelIn.value = String(slot.level);
+    levelIn.min = "1";
+    levelIn.max = "9";
+    levelIn.className = "slot-level";
+    levelIn.title = "Nível";
+    const totalIn = document.createElement("input");
+    totalIn.type = "number";
+    totalIn.value = String(slot.total);
+    totalIn.min = "0";
+    totalIn.className = "slot-total";
+    totalIn.title = "Total";
+    const usedIn = document.createElement("input");
+    usedIn.type = "number";
+    usedIn.value = String(slot.used);
+    usedIn.min = "0";
+    usedIn.className = "slot-used";
+    usedIn.title = "Usados";
+    const sync = (): void => {
+      slot.level = Math.max(1, Math.floor(Number(levelIn.value) || 1));
+      slot.total = Math.max(0, Math.floor(Number(totalIn.value) || 0));
+      slot.used = Math.max(0, Math.floor(Number(usedIn.value) || 0));
+      pushSlots();
+    };
+    for (const input of [levelIn, totalIn, usedIn]) {
+      input.addEventListener("input", sync);
+    }
+    const del = el("button", "slot-del", "✕");
+    del.type = "button";
+    del.title = "Remover slot";
+    del.addEventListener("click", () => {
+      slots = slots.filter((entry) => entry !== slot);
+      pushSlots();
+      row.remove();
+    });
+    row.append(
+      el("span", "sheet-row-name", "Nv"),
+      levelIn,
+      el("span", "sheet-row-name", "Total"),
+      totalIn,
+      el("span", "sheet-row-name", "Usados"),
+      usedIn,
+      del,
+    );
+    return row;
+  }
+
+  for (const slot of slots) {
+    slotsList.appendChild(slotRow(slot));
+  }
+  const addSlot = el("button", "sheet-add sheet-add-slot", "+ Adicionar slot");
+  addSlot.type = "button";
+  addSlot.addEventListener("click", () => {
+    const slot: SpellSlot = { level: 1, total: 2, used: 0 };
+    slots.push(slot);
+    pushSlots();
+    slotsList.appendChild(slotRow(slot));
+  });
+  spellsSection.append(spellsList, addSpell);
+  spellsPanel.appendChild(spellsSection);
+  slotsSection.append(slotsList, addSlot);
+  spellsPanel.appendChild(slotsSection);
+
+  // ── Magias/Equip: inventário ──
+  const invSection = section("Inventário");
+  const invList = el("div", "sheet-list");
+
+  /** One editable inventory row (name + qty + delete). */
+  function inventoryRow(item: InventoryItem): HTMLElement {
+    const row = el("div", "sheet-row sheet-row-edit");
+    const rowName = document.createElement("input");
+    rowName.value = item.name;
+    rowName.className = "sheet-row-input";
+    rowName.placeholder = "Item";
+    rowName.addEventListener("input", () => {
+      update((draft) => {
+        draft.inventory = (draft.inventory ?? []).map((i) =>
+          i.id === item.id ? { ...i, name: rowName.value } : i,
+        );
+      });
+    });
+    const rowQty = document.createElement("input");
+    rowQty.type = "number";
+    rowQty.value = String(item.qty);
+    rowQty.className = "sheet-row-input sheet-row-qty";
+    rowQty.title = "Quantidade";
+    rowQty.addEventListener("input", () => {
+      const v = Number(rowQty.value);
+      if (!Number.isFinite(v)) return;
+      update((draft) => {
+        draft.inventory = (draft.inventory ?? []).map((i) =>
+          i.id === item.id ? { ...i, qty: v } : i,
+        );
+      });
+    });
+    const rowDel = el("button", "sheet-row-del", "✕");
+    rowDel.type = "button";
+    rowDel.title = "Remover item";
+    rowDel.addEventListener("click", () => {
+      update((draft) => {
+        draft.inventory = (draft.inventory ?? []).filter((i) => i.id !== item.id);
+      });
+      row.remove();
+    });
+    row.append(rowName, rowQty, rowDel);
+    return row;
+  }
+
+  const items: InventoryItem[] = sheet.inventory ?? [];
+  for (const item of items) {
+    invList.appendChild(inventoryRow(item));
+  }
+  const addItem = el("button", "sheet-add sheet-add-item", "+ Adicionar item");
+  addItem.type = "button";
+  addItem.addEventListener("click", () => {
+    const item: InventoryItem = { id: newId(), name: "Novo item", qty: 1 };
+    update((draft) => {
+      draft.inventory = [...(draft.inventory ?? []), item];
+    });
+    // Show the editable row right away (no re-render, keeps focus).
+    const added = inventoryRow(item);
+    invList.appendChild(added);
+    added.querySelector<HTMLInputElement>(".sheet-row-input")?.focus();
+  });
+  invSection.append(invList, addItem);
+  spellsPanel.appendChild(invSection);
+
+  // ── Magias/Equip: dinheiro ──
+  const moneySection = section("Dinheiro");
+  const moneyGrid = el("div", "sheet-money-grid");
+  const money: Money = sheet.money ?? { ...DEFAULT_MONEY };
+  for (const coin of ["cp", "sp", "ep", "gp", "pp"] as const) {
+    const wrap = el("label", "sheet-stat");
+    wrap.append(el("span", "sheet-stat-label", coin.toUpperCase()));
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = `sheet-money-${coin}`;
+    input.value = String(money[coin]);
+    input.min = "0";
+    input.addEventListener("input", () => {
+      const v = Number(input.value);
+      if (!Number.isFinite(v)) return;
+      update((draft) => {
+        draft.money = {
+          ...(draft.money ?? { ...DEFAULT_MONEY }),
+          [coin]: Math.max(0, Math.floor(v)),
+        };
+      });
+    });
+    wrap.appendChild(input);
+    moneyGrid.appendChild(wrap);
+  }
+  moneySection.appendChild(moneyGrid);
+  spellsPanel.appendChild(moneySection);
 
   container.appendChild(panel);
 }

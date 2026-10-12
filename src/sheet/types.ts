@@ -49,12 +49,85 @@ export interface Condition {
   effect: string;
 }
 
+/** One attack: name, d20 bonus and damage formula (e.g. "1d8+3"). */
+export interface Attack {
+  id: string;
+  name: string;
+  bonus: number;
+  damage: string;
+}
+
+/** One known/prepared spell: name + spell level (0 = truque). */
+export interface Spell {
+  id: string;
+  name: string;
+  level: number;
+}
+
+/** Spell slots of one level: total vs used. */
+export interface SpellSlot {
+  level: number;
+  total: number;
+  used: number;
+}
+
+/** Coin purse (equipment tab). */
+export interface Money {
+  cp: number;
+  sp: number;
+  ep: number;
+  gp: number;
+  pp: number;
+}
+
+/** Death saves: successes vs failures (3 of either ends it). */
+export interface DeathSaves {
+  successes: number;
+  failures: number;
+}
+
 export interface Sheet {
   id: string;
   name: string;
   ac: number;
   hp: number;
   maxHp: number;
+  /** Member that owns the sheet (`dm`, `p1`..`p5`); absent on SRD imports. */
+  ownerId?: string;
+  /** Character level (1-20); drives the derived proficiency bonus. */
+  level?: number;
+  /** Character class (e.g. "Guerreiro"), free text. */
+  charClass?: string;
+  /** Derived proficiency bonus (2 + floor((level-1)/4)), refreshed on level change. */
+  profBonus?: number;
+  /** Ancestry (header, Roll20-style). */
+  race?: string;
+  /** Alignment (header, free text). */
+  alignment?: string;
+  /** Experience points (header). */
+  xp?: number;
+  /** Inspiration die held (combat header). */
+  inspiration?: boolean;
+  /** Speed in meters (combat header). */
+  speed?: number;
+  /** Flat initiative bonus beyond the dex modifier. */
+  initiativeMisc?: number;
+  /** Temporary hit points (combat header). */
+  tempHp?: number;
+  /** Death saving throws. */
+  deathSaves?: DeathSaves;
+  /** Attacks: click rolls d20 + bonus. */
+  attacks?: Attack[];
+  /** Known spells. */
+  spells?: Spell[];
+  /** Spell slots per level. */
+  spellSlots?: SpellSlot[];
+  /** Coin purse (equipment tab). */
+  money?: Money;
+  /** Languages (bio tab, free text). */
+  languages?: string;
+  /** Backstory (bio tab). */
+  backstory?: string;
   abilities?: AbilityScores;
   /** Data URL of the portrait (uploaded locally, never fetched). */
   photo?: string;

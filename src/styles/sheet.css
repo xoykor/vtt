@@ -392,3 +392,598 @@
 .sheet-notes:focus {
   border-color: var(--tavern-gold);
 }
+
+/* ─── Linha da última rolagem (crítico / falha) ─── */
+.sheet-roll-line {
+  display: none;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  color: var(--tavern-parchment);
+}
+
+.sheet-roll-line.show {
+  display: block;
+}
+
+.sheet-roll-line.crit {
+  border-color: var(--tavern-gold-light);
+  color: var(--tavern-gold-light);
+  box-shadow: 0 0 12px rgba(212, 160, 23, 0.45);
+}
+
+.sheet-roll-line.fumble {
+  border-color: #e85a5a;
+  color: #e85a5a;
+  box-shadow: 0 0 12px rgba(232, 90, 90, 0.35);
+}
+
+/* ─── Identidade Roll20 (classe/nível/raça/alinhamento/XP) ─── */
+.sheet-identity {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.sheet-identity input {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.45rem;
+  outline: none;
+  min-width: 0;
+  width: 100%;
+}
+
+.sheet-identity input:focus {
+  border-color: var(--tavern-gold);
+}
+
+/* ─── Abas Core | Bio | Magias/Equip ─── */
+.sheet-tabs {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.sheet-tab {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.4rem 0.2rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 5px 5px 0 0;
+  color: var(--tavern-text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.sheet-tab:hover {
+  color: var(--tavern-parchment);
+  border-color: var(--tavern-gold);
+}
+
+.sheet-tab.active {
+  color: var(--tavern-gold-light);
+  border-color: var(--tavern-gold);
+  background: rgba(212, 160, 23, 0.12);
+}
+
+.sheet-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+/* ─── Combate ─── */
+.sheet-combat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+}
+
+.sheet-combat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.sheet-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--tavern-text);
+}
+
+.sheet-check-row input {
+  accent-color: var(--tavern-gold);
+  width: 1rem;
+  height: 1rem;
+}
+
+.sheet-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.sheet-inline-field input {
+  width: 4rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-size: 0.9rem;
+  padding: 0.15rem 0.35rem;
+  outline: none;
+}
+
+.sheet-inline-field input:focus {
+  border-color: var(--tavern-gold);
+}
+
+.sheet-init-btn {
+  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
+  border: 1px solid var(--tavern-gold);
+  border-radius: 4px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.sheet-init-btn:hover {
+  filter: brightness(1.2);
+}
+
+.sheet-initiative,
+.sheet-prof-bonus {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+}
+
+.sheet-death-saves {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sheet-death-groups {
+  display: flex;
+  gap: 1rem;
+}
+
+.sheet-death-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sheet-death-group input {
+  accent-color: var(--tavern-gold);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.sheet-death-success input {
+  accent-color: #7ac87a;
+}
+
+.sheet-death-failure input {
+  accent-color: #e85a5a;
+}
+
+.sheet-death-label {
+  font-size: 0.85rem;
+  color: var(--tavern-text-dim);
+}
+
+/* ─── Ataques / magias / slots ─── */
+.attack-row input,
+.spell-name,
+.spell-level,
+.slot-level,
+.slot-total,
+.slot-used {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  padding: 0.2rem 0.35rem;
+  outline: none;
+  min-width: 0;
+}
+
+.attack-row input:focus,
+.spell-name:focus,
+.spell-level:focus,
+.slot-level:focus,
+.slot-total:focus,
+.slot-used:focus {
+  border-color: var(--tavern-gold);
+}
+
+.attack-name,
+.spell-name {
+  flex: 1;
+}
+
+.attack-bonus,
+.spell-level,
+.slot-level,
+.slot-total,
+.slot-used {
+  flex: 0 0 3.2rem;
+  text-align: center;
+}
+
+.attack-damage {
+  flex: 0 0 4.5rem;
+  text-align: center;
+}
+
+.attack-del,
+.spell-del,
+.slot-del {
+  background: none;
+  border: none;
+  color: var(--tavern-text-dim);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.attack-del:hover,
+.spell-del:hover,
+.slot-del:hover {
+  color: #e85a5a;
+  background: rgba(232, 90, 90, 0.15);
+}
+
+/* ─── Idiomas / história / dinheiro ─── */
+.sheet-language,
+.sheet-backstory {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  outline: none;
+}
+
+.sheet-language:focus,
+.sheet-backstory:focus {
+  border-color: var(--tavern-gold);
+}
+
+.sheet-backstory {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.sheet-money-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.4rem;
+}
+
+/* ─── Criador de ficha (fullscreen, sem grid/mapa) ─── */
+.sheet-creator {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(200, 134, 42, 0.12) 0%, transparent 60%),
+    linear-gradient(180deg, #0d0805 0%, #1a0f08 40%, #2d1a0e 100%);
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+}
+
+.creator-card {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.creator-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--tavern-gold-light);
+  text-align: center;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 20px rgba(212, 160, 23, 0.4), 0 4px 8px rgba(0, 0, 0, 0.8);
+}
+
+.creator-subtitle {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0.8rem 0 0.4rem;
+}
+
+.creator-header {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+
+.creator-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.creator-field-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--tavern-gold);
+  text-transform: uppercase;
+}
+
+.creator-field input,
+.creator-field select,
+.creator-field textarea {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.35rem 0.5rem;
+  outline: none;
+  width: 100%;
+}
+
+.creator-field input:focus,
+.creator-field select:focus,
+.creator-field textarea:focus {
+  border-color: var(--tavern-gold);
+}
+
+.creator-prof {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--tavern-gold-light);
+  text-align: center;
+}
+
+.creator-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 2px solid var(--tavern-wood-light);
+  padding-bottom: 0.5rem;
+}
+
+.creator-tab {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.55rem 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 6px 6px 0 0;
+  color: var(--tavern-text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.creator-tab:hover {
+  color: var(--tavern-parchment);
+  border-color: var(--tavern-gold);
+}
+
+.creator-tab.active {
+  color: var(--tavern-gold-light);
+  border-color: var(--tavern-gold);
+  background: rgba(212, 160, 23, 0.12);
+}
+
+.creator-panels {
+  border: 1px solid rgba(212, 160, 23, 0.25);
+  border-radius: 0 0 6px 6px;
+  padding: 0.8rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.creator-abilities {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+
+.creator-ability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem;
+  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
+  border: 2px solid var(--tavern-gold);
+  border-radius: 6px;
+}
+
+.creator-ability-name {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tavern-gold);
+}
+
+.creator-ability-score {
+  width: 100%;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.15rem;
+  outline: none;
+}
+
+.creator-ability-mod {
+  font-size: 0.85rem;
+  color: var(--tavern-text-dim);
+}
+
+.creator-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.creator-skill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--tavern-text);
+}
+
+.creator-skill-check {
+  accent-color: var(--tavern-gold);
+  width: 1rem;
+  height: 1rem;
+}
+
+.creator-skill-name {
+  flex: 1;
+}
+
+.creator-skill-mod {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+}
+
+.creator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.creator-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.creator-row input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 0.3rem 0.5rem;
+  outline: none;
+}
+
+.creator-row select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  padding: 0.3rem 0.5rem;
+  outline: none;
+}
+
+.creator-add {
+  margin-top: 0.4rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+}
+
+.creator-money {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+}
+
+.creator-footer {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: flex-end;
+  padding-bottom: 1rem;
+}
+
+.creator-footer .menu-btn {
+  padding: 0.7rem 1.6rem;
+  font-size: 1rem;
+}
+
+.creator-save {
+  border-color: var(--tavern-gold-light);
+}
+
+@media (max-width: 640px) {
+  .creator-header {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .creator-abilities {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .creator-money {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .creator-tab {
+    font-size: 0.65rem;
+  }
+}

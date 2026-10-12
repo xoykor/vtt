@@ -13,6 +13,7 @@ import { publishRoll, resolveRoll } from "../dice/roller";
 import { frameForResult } from "../dice/scene";
 import { decodeSheet, encodeSheet } from "../sheet/srd";
 import type { Sheet } from "../sheet/types";
+import { sheetKey } from "../sheet/visibility";
 import { tokenKey, type OfflineRoom } from "./room";
 import { eventToCell, renderMapView } from "./mapview";
 import { renderSheetPanel } from "./sheet-panel";
@@ -31,6 +32,8 @@ export interface Session {
   backend: Backend | null;
   guest: boolean;
   rollSeq: number;
+  /** Local member id (`dm`, `p1`..`p5`); empty when unknown (guest before join). */
+  userId: string;
 }
 
 export interface AppShellDeps {
@@ -56,7 +59,15 @@ export interface AppShell {
 /** Create the table shell; `show()` mounts it into the root. */
 export function createAppShell(deps: AppShellDeps): AppShell {
   const { root, room, grid, sheets, session } = deps;
-  let selected = MEMBERS[0];
+  // Guests see only their own sheet: the member bar shrinks to their id
+  // (the host keeps the full table selector). Unknown guests fall back
+  // to the table head until the join assigns them an id.
+  const ownId = session.guest ? session.userId : "";
+  const visibleMembers =
+    session.guest && ownId !== "" ? [ownId] : [...MEMBERS];
+  let selected = visibleMembers.includes(MEMBERS[0])
+    ? MEMBERS[0]
+    : visibleMembers[0];
   let mounted: HTMLElement | null = null;
 
   const canvas = document.createElement("canvas");
@@ -69,6 +80,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   const sheetPanel = document.createElement("div");
 
   const tokenBar = createTokenBar({
+    members: visibleMembers,
     onSelect: (id) => {
       selected = id;
       showSheet();
@@ -132,9 +144,11 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       onChange: (updated) => {
         sheets.set(selected, updated);
         // Mirror edits into the hosted room (host-only): the sheet
-        // travels as one RoomState value under the member key.
+        // travels as one RoomState value under the `sheet:<id>` key.
         if (session.backend && !session.guest) {
-          session.backend.pushDelta({ upsert: { [selected]: encodeSheet(updated) } });
+          session.backend.pushDelta({
+            upsert: { [sheetKey(selected)]: encodeSheet(updated) },
+          });
         }
         tokenBar.setSelected(selected, updated);
       },
@@ -200,7 +214,18 @@ export function createMemberSheets(): Map<string, Sheet> {
   return new Map(
     MEMBERS.map((id, i) => [
       id,
-      decodeSheet(encodeSheet({ id, name: id, ac: 10 + (i % 3), hp: 10, maxHp: 10 })),
+      decodeSheet(
+        encodeSheet({
+          id,
+          name: id,
+          ownerId: id,
+          level: 1,
+          profBonus: 2,
+          ac: 10 + (i % 3),
+          hp: 10,
+          maxHp: 10,
+        }),
+      ),
     ]),
   );
 }

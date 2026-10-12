@@ -224,3 +224,132 @@ test("photo upload sets a data URL on the sheet", () => {
   expect(latest!.photo).toBe("data:image/png;base64,AAAA");
   expect(el.querySelector(".sheet-photo-empty")).toBeNull();
 });
+
+test("header shows Roll20 identity fields and tabs switch panels", () => {
+  const el = document.createElement("div");
+  const sheet = makeSheet();
+  sheet.charClass = "Guerreiro";
+  sheet.level = 5;
+  sheet.race = "Anão";
+  sheet.alignment = "Leal e Bom";
+  sheet.xp = 6500;
+  renderSheetPanel(el, sheet, { onChange: () => {} });
+
+  expect(el.querySelector<HTMLInputElement>(".sheet-class")!.value).toBe("Guerreiro");
+  expect(el.querySelector<HTMLInputElement>(".sheet-level")!.value).toBe("5");
+  expect(el.querySelector<HTMLInputElement>(".sheet-race")!.value).toBe("Anão");
+  expect(el.querySelector<HTMLInputElement>(".sheet-alignment")!.value).toBe(
+    "Leal e Bom",
+  );
+  expect(el.querySelector<HTMLInputElement>(".sheet-xp")!.value).toBe("6500");
+
+  const tabs = [...el.querySelectorAll<HTMLButtonElement>(".sheet-tab")].map(
+    (b) => b.textContent,
+  );
+  expect(tabs).toEqual(["Core", "Bio", "Magias/Equip"]);
+
+  const bio = [...el.querySelectorAll<HTMLButtonElement>(".sheet-tab")].find(
+    (b) => b.textContent === "Bio",
+  )!;
+  bio.click();
+  expect(
+    el.querySelector<HTMLElement>('[data-tab-panel="bio"]')?.style.display,
+  ).not.toBe("none");
+  expect(
+    el.querySelector<HTMLElement>('[data-tab-panel="core"]')?.style.display,
+  ).toBe("none");
+});
+
+test("changing the level recalculates the proficiency bonus", () => {
+  const el = document.createElement("div");
+  let latest: Sheet | null = null;
+  renderSheetPanel(el, makeSheet(), {
+    onChange: (s) => {
+      latest = s;
+    },
+  });
+
+  expect(el.querySelector(".sheet-prof-bonus")!.textContent).toBe("+2");
+  const level = el.querySelector<HTMLInputElement>(".sheet-level")!;
+  level.value = "5";
+  level.dispatchEvent(new Event("input"));
+
+  expect(latest!.level).toBe(5);
+  expect(latest!.profBonus).toBe(3);
+  expect(el.querySelector(".sheet-prof-bonus")!.textContent).toBe("+3");
+});
+
+test("clicking an attack rolls d20 + bonus via onRoll", () => {
+  const el = document.createElement("div");
+  const rolls: Array<{ label: string; mod: number; total: number }> = [];
+  const sheet = makeSheet();
+  sheet.attacks = [{ id: "a1", name: "Machado", bonus: 5, damage: "1d8+3" }];
+  renderSheetPanel(el, sheet, {
+    onChange: () => {},
+    onRoll: (label, result) => {
+      rolls.push({ label, mod: result.mod, total: result.total });
+    },
+  });
+
+  el.querySelector<HTMLButtonElement>(".attack-row")!.click();
+  expect(rolls).toHaveLength(1);
+  expect(rolls[0].label).toBe("Machado");
+  expect(rolls[0].mod).toBe(5);
+  expect(el.querySelector(".sheet-roll-line")!.textContent).toContain("Machado");
+});
+
+test("natural 20 and 1 highlight the roll line as crit/fumble", () => {
+  const el = document.createElement("div");
+  renderSheetPanel(el, makeSheet(), {
+    onChange: () => {},
+    rng: () => 0.999,
+  });
+  el.querySelector<HTMLButtonElement>(".ability-card")!.click();
+  expect(el.querySelector(".sheet-roll-line")!.classList.contains("crit")).toBe(
+    true,
+  );
+  expect(el.querySelector(".sheet-roll-line")!.textContent).toContain("CRÍTICO");
+
+  const el2 = document.createElement("div");
+  renderSheetPanel(el2, makeSheet(), {
+    onChange: () => {},
+    rng: () => 0,
+  });
+  el2.querySelector<HTMLButtonElement>(".ability-card")!.click();
+  expect(el2.querySelector(".sheet-roll-line")!.classList.contains("fumble")).toBe(
+    true,
+  );
+  expect(el2.querySelector(".sheet-roll-line")!.textContent).toContain(
+    "FALHA CRÍTICA",
+  );
+});
+
+test("death saves, money and initiative misc persist via onChange", () => {
+  const el = document.createElement("div");
+  let latest: Sheet | null = null;
+  renderSheetPanel(el, makeSheet(), {
+    onChange: (s) => {
+      latest = s;
+    },
+  });
+
+  const checks = el.querySelectorAll<HTMLInputElement>(
+    ".sheet-death-saves input[type=checkbox]",
+  );
+  expect(checks).toHaveLength(6);
+  (checks[0] as HTMLInputElement).checked = true;
+  checks[0].dispatchEvent(new Event("change"));
+  expect(latest!.deathSaves).toEqual({ successes: 1, failures: 0 });
+
+  const gp = el.querySelector<HTMLInputElement>(".sheet-money-gp")!;
+  gp.value = "12";
+  gp.dispatchEvent(new Event("input"));
+  expect(latest!.money!.gp).toBe(12);
+
+  const misc = el.querySelector<HTMLInputElement>(".sheet-init-misc")!;
+  misc.value = "1";
+  misc.dispatchEvent(new Event("input"));
+  // DES 12 → +1, misc +1 = +2.
+  expect(el.querySelector(".sheet-initiative")!.textContent).toBe("+2");
+  expect(latest!.initiativeMisc).toBe(1);
+});

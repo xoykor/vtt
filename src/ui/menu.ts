@@ -17,6 +17,8 @@ export interface MenuHandlers {
 export interface Menu {
   /** Hide the menu (backdrop, buttons and footer). */
   hide(): void;
+  /** Show the menu again (used when the sheet creator is cancelled). */
+  show(): void;
   /** Write a message into the status line. */
   setStatus(message: string, kind?: NoticeKind): void;
 }
@@ -179,6 +181,11 @@ export function createMenu(root: HTMLElement, handlers: MenuHandlers): Menu {
       bg.style.display = "none";
       menuContainer.style.display = "none";
       footer.style.display = "none";
+    },
+    show(): void {
+      bg.style.display = "";
+      menuContainer.style.display = "";
+      footer.style.display = "";
     },
     setStatus(message: string, kind: NoticeKind = ""): void {
       statusDiv.textContent = message;
