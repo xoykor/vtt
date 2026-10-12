@@ -6,7 +6,6 @@
 // Tokens com `represents` herdam controle da ficha.
 
 import "../styles/sheet.css";
-import { createFog, revealFog } from "../map/fog";
 import { inBounds, type Grid } from "../map/grid";
 import { computeLight } from "../map/light";
 import { encodeToken } from "../map/tokens";
@@ -19,6 +18,7 @@ import type { Sheet } from "../sheet/types";
 import { sheetKey } from "../sheet/visibility";
 import { tokenKey, type OfflineRoom } from "./room";
 import { eventToCell, renderMapView } from "./mapview";
+import { renderTableView, type TableView } from "./table-view";
 import { renderSheetPanel } from "./sheet-panel";
 import { createDicePanel } from "./dice-panel";
 import { createThreeDiceView, type ThreeDiceView } from "../dice/three-scene";
@@ -100,8 +100,9 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   const { root, room, grid, sheets, session } = deps;
   let selected = session.character ?? "";
   let mounted: HTMLElement | null = null;
-
-  const canvas = document.createElement("canvas");
+  // The table view owns the canvas (toolbar, fog brush, chat…); the
+  // shell paints the base scene into it and moves tokens on it.
+  let table: TableView | null = null;
   const side = document.createElement("div");
   side.style.width = "360px";
   side.style.flexShrink = "0";
@@ -163,12 +164,16 @@ export function createAppShell(deps: AppShellDeps): AppShell {
   }
 
   function draw(): void {
-    const fog = revealFog(createFog(grid.width, grid.height), [
-      { x: 0, y: 0 },
-      { x: 7, y: 0 },
-      { x: 7, y: 7 },
-      { x: 0, y: 7 },
-    ]);
+    // The table repaints base scene + overlay + fog in one pass.
+    table?.repaint();
+  }
+
+  /**
+   * Base scene for the table canvas: background + light at the
+   * table's cell size. Fog starts revealed — the interactive fog
+   * brush owns hiding from here on.
+   */
+  function paintBase(canvas: HTMLCanvasElement, cellPx: number): void {
     const lit = computeLight(
       {
         width: grid.width,
@@ -177,12 +182,23 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       },
       [{ pos: { x: 0.5, y: 0.5 }, radius: 12 }],
     );
-    renderMapView(canvas, {
-      grid,
-      tokens: room.tokens(),
-      fog: fog.visible,
-      lit,
-    });
+    renderMapView(
+      canvas,
+      {
+        grid,
+        tokens: room.tokens(),
+        fog: new Array(grid.width * grid.height).fill(true),
+        lit,
+      },
+      cellPx,
+    );
+  }
+
+  /** Speaking-as name for the chat: current character, else display name. */
+  function speakerName(): string {
+    return session.character
+      ? (sheets.get(session.character)?.name ?? session.displayName)
+      : session.displayName;
   }
 
   function showSheet(): void {
@@ -258,11 +274,14 @@ export function createAppShell(deps: AppShellDeps): AppShell {
     tokenBar.setSelected(selected, projected);
   }
 
-  canvas.addEventListener("click", (ev) => {
-    const cell = eventToCell(canvas, ev.clientX, ev.clientY);
-    if (!cell || !inBounds(grid, cell.x, cell.y)) return;
-    const peerId = peerIdOf(session);
-    const isGM = isGMOf(session);
+  function attachTokenClick(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener("click", (ev) => {
+      // Tools own the canvas except Select, which keeps token moves.
+      if (table?.getTool() !== "select") return;
+      const cell = eventToCell(canvas, ev.clientX, ev.clientY, table?.gridPanel.get().size ?? 32);
+      if (!cell || !inBounds(grid, cell.x, cell.y)) return;
+      const peerId = peerIdOf(session);
+      const isGM = isGMOf(session);
     // Token da ficha selecionada (herda controle); legado cai p/ id.
     const tokens = room.tokens();
     let target = tokens.find((t) => t.represents === selected);
@@ -280,7 +299,8 @@ export function createAppShell(deps: AppShellDeps): AppShell {
       session.backend.pushDelta({ upsert: { [tokenKey(target.id)]: encodeToken(moved) } });
     }
     draw();
-  });
+    });
+  }
 
   return {
     show(): void {
@@ -294,9 +314,33 @@ export function createAppShell(deps: AppShellDeps): AppShell {
         wrap.style.padding = "16px";
         wrap.style.height = "100%";
 
+        // The table view (rail, canvas, layers, grid, chat) mounts as
+        // the map column; the sheet bar + dice keep the side column.
+        const tableHost = document.createElement("div");
+        tableHost.className = "table-host";
+        tableHost.style.flex = "1";
+        tableHost.style.minWidth = "0";
+        tableHost.style.display = "flex";
+        table = renderTableView(tableHost, {
+          room,
+          role: isGMOf(session) ? "host" : "player",
+          grid,
+          speaker: () => speakerName(),
+          isGM: isGMOf(session),
+          initialFogVisible: true,
+          paintBase,
+          onBroadcast: (delta) => {
+            if (session.backend && isGMOf(session)) session.backend.pushDelta(delta);
+          },
+        });
+        const tableCanvas = table.el.querySelector(
+          "[data-testid=table-canvas]",
+        ) as HTMLCanvasElement;
+        attachTokenClick(tableCanvas);
+
         if (!diceView) diceView = createThreeDiceView(diceViewHost);
         side.append(tokenBar.el, sheetPanel, dice.el, diceViewHost);
-        wrap.append(canvas, side);
+        wrap.append(tableHost, side);
         appContent.appendChild(wrap);
         root.appendChild(appContent);
         mounted = appContent;
@@ -318,6 +362,7 @@ export function createAppShell(deps: AppShellDeps): AppShell {
     refreshSheets(): void {
       refreshBar();
       showSheet();
+      table?.chat.refresh();
     },
   };
 }
