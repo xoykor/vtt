@@ -12,6 +12,8 @@ export interface Token {
   id: string;
   pos: Point;
   hp: number;
+  /** Ficha representada (`sheetId|null`); controle herdado da ficha. Ausente = legado. */
+  represents?: string | null;
 }
 
 export type MoveResult =
@@ -26,12 +28,19 @@ function checkPos(pos: Point): string | null {
   return null;
 }
 
-export function createToken(id: string, pos: Point, hp: number): Token {
+export function createToken(
+  id: string,
+  pos: Point,
+  hp: number,
+  represents?: string | null,
+): Token {
   if (id.length === 0) throw new Error("missing token id");
   const posErr = checkPos(pos);
   if (posErr !== null) throw new Error(posErr);
   if (!Number.isFinite(hp)) throw new Error(`invalid hp: ${hp}`);
-  return { id, pos: { x: pos.x, y: pos.y }, hp };
+  const token: Token = { id, pos: { x: pos.x, y: pos.y }, hp };
+  if (represents !== undefined) token.represents = represents;
+  return token;
 }
 
 export function encodeToken(token: Token): string {
@@ -56,7 +65,11 @@ export function decodeToken(json: string): Token {
     throw new Error(`invalid pos: ${String(pos.x)},${String(pos.y)}`);
   }
   if (typeof raw.hp !== "number") throw new Error("missing field: hp");
-  return { id: raw.id, pos: { x: pos.x, y: pos.y }, hp: raw.hp };
+  const token: Token = { id: raw.id, pos: { x: pos.x, y: pos.y }, hp: raw.hp };
+  // `represents` tolerante: ausente = legado; null/string válidos.
+  if (raw.represents === null) token.represents = null;
+  else if (typeof raw.represents === "string") token.represents = raw.represents;
+  return token;
 }
 
 /**

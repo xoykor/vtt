@@ -92,8 +92,18 @@ export interface Sheet {
   ac: number;
   hp: number;
   maxHp: number;
-  /** Member that owns the sheet (`dm`, `p1`..`p5`); absent on SRD imports. */
+  /** Legacy slot owner (`dm`, `p1`..`p5`); kept for migration, superseded by `controllers`. */
   ownerId?: string;
+  /** Peers allowed to see only metadata (nome/avatar/bio). GM bypassa. */
+  viewers?: string[];
+  /** Peers allowed full control (sheet completa+bio+tokens+falar como). GM bypassa. */
+  controllers?: string[];
+  /** Quando true, todos vêem metadados ("todos"). */
+  publicView?: boolean;
+  /** Quando true, todos controlam ("todos"). */
+  publicControl?: boolean;
+  /** Notas do GM: nunca sincronizam p/ não-GM (filtrar na ingestão). */
+  gmNotes?: string;
   /** Character level (1-20); drives the derived proficiency bonus. */
   level?: number;
   /** Character class (e.g. "Guerreiro"), free text. */

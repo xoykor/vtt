@@ -174,17 +174,27 @@ export function decodeSheet(json: string): Sheet {
   if (typeof raw.name !== "string" || raw.name.length === 0) {
     throw new Error("missing field: name");
   }
-  if (typeof raw.ac !== "number") throw new Error("missing field: ac");
-  if (typeof raw.hp !== "number") throw new Error("missing field: hp");
-  if (typeof raw.maxHp !== "number") {
-    throw new Error("missing field: maxHp");
-  }
+  // Stats tolerantes p/ metadados (viewers): ausente = 0 (redacted);
+  // presente mas não-número = erro (nunca mascara corrupção).
+  let ac = 0;
+  let hp = 0;
+  let maxHp = 0;
+  if (raw.ac === undefined) ac = 0;
+  else if (typeof raw.ac === "number" && Number.isFinite(raw.ac)) ac = raw.ac;
+  else throw new Error("missing field: ac");
+  if (raw.hp === undefined) hp = 0;
+  else if (typeof raw.hp === "number" && Number.isFinite(raw.hp)) hp = raw.hp;
+  else throw new Error("missing field: hp");
+  if (raw.maxHp === undefined) maxHp = 0;
+  else if (typeof raw.maxHp === "number" && Number.isFinite(raw.maxHp))
+    maxHp = raw.maxHp;
+  else throw new Error("missing field: maxHp");
   const sheet: Sheet = {
     id: raw.id,
     name: raw.name,
-    ac: raw.ac,
-    hp: raw.hp,
-    maxHp: raw.maxHp,
+    ac,
+    hp,
+    maxHp,
   };
   if (typeof raw.ownerId === "string" && raw.ownerId.length > 0) {
     sheet.ownerId = raw.ownerId;
@@ -225,9 +235,22 @@ export function decodeSheet(json: string): Sheet {
     "alignment",
     "languages",
     "backstory",
+    "gmNotes",
   ] as const) {
     if (typeof raw[key] === "string") sheet[key] = raw[key] as string;
   }
+  // ACL dupla (tolerante: ignora entradas não-string, nunca quebra sync).
+  for (const key of ["viewers", "controllers"] as const) {
+    if (Array.isArray(raw[key])) {
+      const ids = (raw[key] as unknown[]).filter(
+        (v): v is string => typeof v === "string" && v.length > 0,
+      );
+      sheet[key] = ids;
+    }
+  }
+  if (typeof raw.publicView === "boolean") sheet.publicView = raw.publicView;
+  if (typeof raw.publicControl === "boolean")
+    sheet.publicControl = raw.publicControl;
   // Numeric combat fields: copied when finite.
   for (const key of ["xp", "speed", "initiativeMisc", "tempHp"] as const) {
     if (typeof raw[key] === "number" && Number.isFinite(raw[key])) {
