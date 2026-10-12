@@ -323,6 +323,10 @@ let host: RustHost;
 let guest: TsGuest;
 
 test.beforeAll(async () => {
+  // `test.skip` above skips the tests but NOT this hook: without the
+  // binary a plain clone would fail here instead of skipping. Bail out
+  // early so the suite stays green with an explicit skip reason.
+  if (HOST_BIN === null) return;
   host = new RustHost();
   await host.start();
   guest = new TsGuest();
@@ -330,6 +334,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  if (HOST_BIN === null) return;
   await host.stop();
 });
 

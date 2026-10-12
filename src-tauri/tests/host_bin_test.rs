@@ -121,25 +121,48 @@ fn guest_for(room: &str) -> Handshake {
 }
 
 /// Full guest session on ONE kept-open stream: handshake → room reply →
-/// snapshot → delta → updated snapshot. Retried briefly: a previous
-/// probe connection (phase A) may still be draining on the host.
+/// snapshot → delta → updated snapshot. Retries ONLY transient
+/// transport failures (connect/handshake read/write): a previous probe
+/// connection (phase A) may still be draining on the host. Deterministic
+/// validation mismatches (room reply, snapshot shape, version gate)
+/// fail fast — retrying them only sleeps 10 s and masks the real error.
 async fn guest_session(
     addr: std::net::SocketAddr,
     room: &str,
 ) -> Result<(vtt_tauri::save::GameSave, vtt_tauri::save::GameSave), String>
 {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let mut first_err: Option<String> = None;
     loop {
         match guest_session_once(addr, room).await {
             Ok(pair) => return Ok(pair),
-            Err(e) if std::time::Instant::now() < deadline => {
+            Err(e) => {
+                if !is_transient(&e) {
+                    return Err(e);
+                }
+                if first_err.is_none() {
+                    first_err = Some(e);
+                }
+                if std::time::Instant::now() >= deadline {
+                    return Err(first_err
+                        .expect("transient error implies first_err is set"));
+                }
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                let _ = e;
                 continue;
             }
-            Err(e) => return Err(e),
         }
     }
+}
+
+/// Transient transport failures worth one more dial: connect timeouts,
+/// handshake timeouts and read/write EOFs. Everything else (room reply
+/// mismatch, snapshot shape, version gate, malformed JSON) is
+/// deterministic and must fail fast.
+fn is_transient(err: &str) -> bool {
+    err.starts_with("tcp connect")
+        || err.starts_with("tcp handshake")
+        || err.starts_with("tcp read failed")
+        || err.starts_with("tcp write failed")
 }
 
 async fn guest_session_once(
