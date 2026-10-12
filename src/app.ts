@@ -74,13 +74,24 @@ function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<unkno
 const invokeViaBridge: InvokeFn = (cmd, args) => tauriInvoke(cmd, args);
 
 /**
- * Shown when "Hospedar" is clicked outside the Tauri app (plain
- * browser): hosting needs the Rust backend, so there is no room to
- * create here — point at `npm run tauri dev` / the installer instead
- * of letting the `tauriInvoke` rejection escape as a bare error.
+ * Kept for compatibility (Task 4 webview guidance). The browser Host
+ * path no longer shows it: plain-browser "Hospedar" now enters a
+ * local offline table as GM instead of dead-ending here.
+ * @deprecated
  */
 export const HOST_UNAVAILABLE_MESSAGE =
   "Hospedar requer o app Tauri — rode `npm run tauri dev` ou use o instalador";
+
+/**
+ * Visible note inside the hosted table when the session is a local
+ * offline fallback (plain browser, no Rust backend): no LAN yet —
+ * network play needs the Tauri app / installer (IP:port) plus the
+ * ZeroTier/Radmin/Hamachi VPN hint when direct connections fail.
+ */
+export const LOCAL_SESSION_NOTE =
+  "Sessão LOCAL — sem LAN ainda. Para jogar em rede use o app Tauri " +
+  "(`npm run tauri dev` ou instalador) com IP:porta; se não conectar, " +
+  "use VPN ZeroTier/Radmin/Hamachi e compartilhe esse IP.";
 
 /** Sync the sheets map from the (already filtered) room state. Exported p/ testes. */
 export function syncSheetsFromRoom(room: OfflineRoom, sheets: Map<string, import("./sheet/types").Sheet>): void {
@@ -248,6 +259,30 @@ export function startApp(root: HTMLElement, opts: StartAppOptions = {}): void {
     shell.refreshSheets();
   }
 
+  /** Visible LOCAL-session banner inside the mounted table (browser fallback). */
+  function showLocalSessionNote(): void {
+    const appContent = root.querySelector(".app-content");
+    if (!appContent) return;
+    if (appContent.querySelector(".local-session-note")) return;
+    const note = document.createElement("div");
+    note.className = "local-session-note";
+    note.textContent = LOCAL_SESSION_NOTE;
+    appContent.prepend(note);
+  }
+
+  /** Plain-browser host: enter the local OfflineRoom as GM (no backend). */
+  function hostLocally(sheet: Sheet | null): void {
+    if (sheet) {
+      session.character = sheet.id;
+      ensureTokenForSheet(sheet);
+    }
+    session.guest = false;
+    session.isGM = true;
+    menu.setStatus("Sessão local criada — você é o Mestre (GM).", "success");
+    enterTable();
+    showLocalSessionNote();
+  }
+
   /** Token vinculado à ficha (criado ao entrar em sessão, nunca ao salvar). */
   function ensureTokenForSheet(sheet: Sheet): void {
     const tokens = room.tokens();
@@ -272,8 +307,7 @@ export function startApp(root: HTMLElement, opts: StartAppOptions = {}): void {
   /** Host a session with `sheet` as the active character (GM). */
   function hostWithSheet(sheet: Sheet | null): void {
     if (!isTauri()) {
-      menu.setStatus(HOST_UNAVAILABLE_MESSAGE, "error");
-      library?.setStatus(HOST_UNAVAILABLE_MESSAGE);
+      hostLocally(sheet);
       return;
     }
     if (sheet) {

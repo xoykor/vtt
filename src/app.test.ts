@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-// Menu "Hospedar" without the Tauri bridge: clicking must show the
-// setup guidance (never call invoke, never leave an empty status).
+// Menu "Hospedar" without the Tauri bridge: clicking enters the local
+// offline table as GM (same enterTable path as Tauri success) with a
+// visible LOCAL-session note — never the Tauri-only dead-end.
 import { afterEach, expect, test } from "vitest";
-import { HOST_UNAVAILABLE_MESSAGE, startApp } from "./app";
+import { HOST_UNAVAILABLE_MESSAGE, LOCAL_SESSION_NOTE, startApp } from "./app";
 
 function clickButton(root: HTMLElement, label: string): HTMLButtonElement {
   const btn = [...root.querySelectorAll("button")].find((b) =>
@@ -17,19 +18,28 @@ afterEach(() => {
   delete (window as unknown as Record<string, unknown>).__TAURI__;
 });
 
-test("Hospedar without Tauri shows the installer guidance", () => {
+test("Hospedar without Tauri enters the local table as GM", () => {
   const root = document.createElement("div");
   document.body.appendChild(root);
   try {
     startApp(root);
     clickButton(root, "Hospedar");
-    const status = root.querySelector(".menu-status");
-    expect(status?.textContent).toBe(HOST_UNAVAILABLE_MESSAGE);
-    expect(status?.classList.contains("error")).toBe(true);
-    // The menu stays up: the user can still create a sheet offline.
+    // Same enterTable path as the Tauri success: table mounted, menu hidden.
+    expect(root.querySelector(".app-content")).not.toBeNull();
     expect(
       (root.querySelector(".menu-container") as HTMLElement)?.style.display,
-    ).not.toBe("none");
+    ).toBe("none");
+    // No dead-end hint anymore.
+    expect(root.querySelector(".menu-status")?.textContent).not.toBe(
+      HOST_UNAVAILABLE_MESSAGE,
+    );
+    // Visible LOCAL-session note inside the table (LAN guidance).
+    const note = root.querySelector(".local-session-note");
+    expect(note).not.toBeNull();
+    expect(note?.textContent).toBe(LOCAL_SESSION_NOTE);
+    expect(note?.textContent).toMatch(/LOCAL/);
+    expect(note?.textContent).toMatch(/Tauri/);
+    expect(note?.textContent).toMatch(/ZeroTier\/Radmin/);
   } finally {
     root.remove();
   }

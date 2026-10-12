@@ -179,7 +179,7 @@ test("viewing a sheet opens details without the grid", () => {
   }
 });
 
-test("hosting from the library without Tauri shows guidance in the library", () => {
+test("hosting from the library without Tauri enters the local table", () => {
   const storage = memStorage();
   const root = document.createElement("div");
   document.body.appendChild(root);
@@ -187,9 +187,17 @@ test("hosting from the library without Tauri shows guidance in the library", () 
     startApp(root, { storage });
     saveHero(root, "Borin");
     root.querySelector<HTMLButtonElement>(".library-host")!.click();
-    expect(root.querySelector(".library-status")?.textContent).toContain("Tauri");
-    // Still no table: the grid only mounts inside a real session.
-    expect(root.querySelector(".app-content")).toBeNull();
+    // Same enterTable path as Tauri success: table mounted, library closed.
+    expect(root.querySelector(".app-content")).not.toBeNull();
+    expect(root.querySelector(".char-library")).toBeNull();
+    // The GM enters with that sheet available (mirrors the Tauri path).
+    expect(root.querySelector(".app-content")?.textContent).toContain("Borin");
+    // Visible LOCAL-session note inside the table (LAN guidance).
+    const note = root.querySelector(".local-session-note");
+    expect(note).not.toBeNull();
+    expect(note?.textContent).toMatch(/LOCAL/);
+    expect(note?.textContent).toMatch(/Tauri/);
+    expect(note?.textContent).toMatch(/ZeroTier\/Radmin/);
   } finally {
     root.remove();
   }
