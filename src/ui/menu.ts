@@ -1,7 +1,9 @@
-// Menu start menu: SVG backdrop plus the three buttons (Hospedar /
-// Entrar / Criar Ficha) with the join panel (IP:Porta) and a status
-// line. Pure DOM: every action goes through the handlers the caller
+// Menu start menu: animated vault backdrop plus the three buttons
+// (Hospedar / Entrar / Criar Ficha) with the join panel (IP:Porta) and a
+// status line. Pure DOM: every action goes through the handlers the caller
 // passes in, so this module knows nothing about rooms or the bridge.
+
+import { startMenuBackdrop, type MenuBackdropHandle } from "./menu-backdrop";
 
 export type NoticeKind = "" | "error" | "success";
 
@@ -25,63 +27,23 @@ export interface Menu {
   setStatus(message: string, kind?: NoticeKind): void;
 }
 
-/** SVG silhouette of a medieval menu for the background. */
-function menuSvg(): string {
-  return `
-    <svg class="menu-silhouette" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="roofGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#3d2517;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#1a0f08;stop-opacity:1" />
-        </linearGradient>
-        <linearGradient id="wallGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#2d1a0e;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#0d0805;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-      <!-- Main building -->
-      <rect x="300" y="180" width="600" height="220" fill="url(#wallGrad)" />
-      <!-- Roof -->
-      <polygon points="250,180 600,80 950,180" fill="url(#roofGrad)" />
-      <!-- Chimney -->
-      <rect x="700" y="60" width="40" height="80" fill="#1a0f08" />
-      <rect x="695" y="55" width="50" height="10" fill="#2d1a0e" />
-      <!-- Windows with warm light -->
-      <rect x="380" y="220" width="50" height="60" fill="#c8862a" opacity="0.7" rx="2" />
-      <rect x="385" y="225" width="40" height="50" fill="#e8a83e" opacity="0.5" rx="1" />
-      <rect x="520" y="220" width="50" height="60" fill="#c8862a" opacity="0.7" rx="2" />
-      <rect x="525" y="225" width="40" height="50" fill="#e8a83e" opacity="0.5" rx="1" />
-      <rect x="660" y="220" width="50" height="60" fill="#c8862a" opacity="0.7" rx="2" />
-      <rect x="665" y="225" width="40" height="50" fill="#e8a83e" opacity="0.5" rx="1" />
-      <!-- Door -->
-      <rect x="560" y="280" width="80" height="120" fill="#1a0f08" rx="4" />
-      <rect x="565" y="285" width="70" height="110" fill="#0d0805" rx="2" />
-      <!-- Door handle -->
-      <circle cx="620" cy="340" r="4" fill="#d4a017" />
-      <!-- Left annex -->
-      <rect x="150" y="240" width="180" height="160" fill="url(#wallGrad)" />
-      <polygon points="130,240 240,180 350,240" fill="url(#roofGrad)" />
-      <rect x="200" y="280" width="40" height="50" fill="#c8862a" opacity="0.5" rx="2" />
-      <!-- Right annex -->
-      <rect x="870" y="240" width="180" height="160" fill="url(#wallGrad)" />
-      <polygon points="850,240 960,180 1070,240" fill="url(#roofGrad)" />
-      <rect x="930" y="280" width="40" height="50" fill="#c8862a" opacity="0.5" rx="2" />
-      <!-- Barrels -->
-      <ellipse cx="120" cy="380" rx="30" ry="25" fill="#2d1a0e" />
-      <rect x="95" y="360" width="50" height="40" fill="#3d2517" rx="5" />
-      <ellipse cx="120" cy="360" rx="25" ry="8" fill="#1a0f08" />
-      <ellipse cx="1080" cy="380" rx="30" ry="25" fill="#2d1a0e" />
-      <rect x="1055" y="360" width="50" height="40" fill="#3d2517" rx="5" />
-      <ellipse cx="1080" cy="360" rx="25" ry="8" fill="#1a0f08" />
-      <!-- Lantern posts -->
-      <rect x="420" y="300" width="6" height="100" fill="#1a0f08" />
-      <rect x="410" y="290" width="26" height="20" fill="#2d1a0e" rx="3" />
-      <rect x="415" y="295" width="16" height="10" fill="#e8a83e" opacity="0.6" rx="2" />
-      <rect x="770" y="300" width="6" height="100" fill="#1a0f08" />
-      <rect x="760" y="290" width="26" height="20" fill="#2d1a0e" rx="3" />
-      <rect x="765" y="295" width="16" height="10" fill="#e8a83e" opacity="0.6" rx="2" />
-    </svg>
-  `;
+/** localStorage key for the vault-sound mute choice. */
+export const MENU_MUTED_KEY = "vtt:menu-muted";
+
+function readMutedChoice(): boolean {
+  try {
+    return window.localStorage?.getItem(MENU_MUTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeMutedChoice(muted: boolean): void {
+  try {
+    window.localStorage?.setItem(MENU_MUTED_KEY, muted ? "1" : "0");
+  } catch {
+    // Private mode: the choice simply does not persist.
+  }
 }
 
 /** Build the menu (backdrop, title, three buttons, join panel). */
@@ -90,8 +52,60 @@ export function createMenu(root: HTMLElement, handlers: MenuHandlers): Menu {
 
   const bg = document.createElement("div");
   bg.className = "menu-bg";
-  bg.innerHTML = menuSvg();
+
+  const overlay = document.createElement("div");
+  overlay.className = "menu-backdrop-overlay";
+  overlay.setAttribute("aria-hidden", "true");
+
+  let muted = readMutedChoice();
+  let backdrop: MenuBackdropHandle | null = null;
+  let canvasEl: HTMLCanvasElement | null = null;
+
+  const muteBtn = document.createElement("button");
+  muteBtn.type = "button";
+  muteBtn.className = "menu-mute-btn";
+  function paintMuteBtn(): void {
+    muteBtn.textContent = muted ? "🔇" : "🔊";
+    muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    const label = muted ? "Ativar sons do cofre" : "Silenciar sons do cofre";
+    muteBtn.setAttribute("aria-label", label);
+    muteBtn.title = label;
+  }
+  paintMuteBtn();
+  muteBtn.addEventListener("click", () => {
+    muted = !muted;
+    writeMutedChoice(muted);
+    paintMuteBtn();
+    backdrop?.setMuted(muted);
+  });
+
+  /** Mount the animated canvas (cheap: one static frame when reduced). */
+  function mountBackdrop(): void {
+    if (canvasEl || bg.style.display === "none") return;
+    const canvas = document.createElement("canvas");
+    canvas.className = "menu-backdrop-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    bg.prepend(canvas);
+    canvasEl = canvas;
+    try {
+      backdrop = startMenuBackdrop(canvas, { muted });
+    } catch {
+      // No canvas/audio in this browser: the CSS gradient stays behind.
+      backdrop = null;
+    }
+  }
+
+  /** Stop the loop + free the canvas so hidden menus cost nothing. */
+  function teardownBackdrop(): void {
+    backdrop?.stop();
+    backdrop = null;
+    canvasEl?.remove();
+    canvasEl = null;
+  }
+
+  bg.append(overlay, muteBtn);
   root.appendChild(bg);
+  mountBackdrop();
 
   const menuContainer = document.createElement("div");
   menuContainer.className = "menu-container";
@@ -186,6 +200,7 @@ export function createMenu(root: HTMLElement, handlers: MenuHandlers): Menu {
 
   return {
     hide(): void {
+      teardownBackdrop();
       bg.style.display = "none";
       menuContainer.style.display = "none";
       footer.style.display = "none";
@@ -194,6 +209,7 @@ export function createMenu(root: HTMLElement, handlers: MenuHandlers): Menu {
       bg.style.display = "";
       menuContainer.style.display = "";
       footer.style.display = "";
+      mountBackdrop();
     },
     setStatus(message: string, kind: NoticeKind = ""): void {
       statusDiv.textContent = message;
