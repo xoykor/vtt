@@ -102,6 +102,29 @@ test("decodeSheet round-trips owner, level, class and proficiency", () => {
   expect(decodeSheet(encodeSheet(s))).toEqual(s);
 });
 
+test("decodeSheet round-trips the full Roll20 sheet", () => {
+  const s = importMonster(goblinSrd);
+  s.ownerId = "p1";
+  s.level = 5;
+  s.charClass = "Guerreiro";
+  s.profBonus = 3;
+  s.race = "Anão";
+  s.alignment = "Leal e Bom";
+  s.xp = 6500;
+  s.inspiration = true;
+  s.speed = 7.5;
+  s.initiativeMisc = 1;
+  s.tempHp = 4;
+  s.deathSaves = { successes: 1, failures: 0 };
+  s.attacks = [{ id: "a1", name: "Machado", bonus: 5, damage: "1d8+3" }];
+  s.spells = [{ id: "m1", name: "Mãos Flamejantes", level: 1 }];
+  s.spellSlots = [{ level: 1, total: 2, used: 1 }];
+  s.money = { cp: 0, sp: 3, ep: 0, gp: 12, pp: 0 };
+  s.languages = "Comum, Anão";
+  s.backstory = "Forjado nas minas do norte.";
+  expect(decodeSheet(encodeSheet(s))).toEqual(s);
+});
+
 test("fetchSrd deep-clones abilities on store and hit", async () => {
   const payload = {
     ...goblinSrd,

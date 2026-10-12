@@ -4,7 +4,17 @@
 // Map (no central server); art fields (`img`, `image`, ...) are
 // dropped on import — no official WotC art is stored or fetched.
 
-import type { AbilityScores, NormalizedRoll, Roll, Sheet } from "./types";
+import type {
+  AbilityScores,
+  Attack,
+  DeathSaves,
+  Money,
+  NormalizedRoll,
+  Roll,
+  Sheet,
+  Spell,
+  SpellSlot,
+} from "./types";
 
 /** Minimal monster entry accepted from Open5e or the 5e SRD API. */
 export interface SrdMonsterEntry {
@@ -95,14 +105,9 @@ export function createSrdCache(): Map<string, Sheet> {
   return new Map<string, Sheet>();
 }
 
-/** Deep-clone a Sheet (abilities is cloned, never shared). */
+/** Deep-clone a Sheet (arrays and blocks are cloned, never shared). */
 function cloneSheet(sheet: Sheet): Sheet {
-  return {
-    ...sheet,
-    ...(sheet.abilities !== undefined
-      ? { abilities: { ...sheet.abilities } }
-      : {}),
-  };
+  return structuredClone(sheet);
 }
 
 const OPEN5E_MONSTER_URL = "https://api.open5e.com/monsters/";
@@ -212,5 +217,257 @@ export function decodeSheet(json: string): Sheet {
       cha: ab.cha as number,
     };
   }
+  // Free-text header/bio fields: copied when present as strings.
+  for (const key of [
+    "photo",
+    "notes",
+    "race",
+    "alignment",
+    "languages",
+    "backstory",
+  ] as const) {
+    if (typeof raw[key] === "string") sheet[key] = raw[key] as string;
+  }
+  // Numeric combat fields: copied when finite.
+  for (const key of ["xp", "speed", "initiativeMisc", "tempHp"] as const) {
+    if (typeof raw[key] === "number" && Number.isFinite(raw[key])) {
+      sheet[key] = raw[key] as number;
+    }
+  }
+  if (typeof raw.inspiration === "boolean") sheet.inspiration = raw.inspiration;
+  const saves = readDeathSaves(raw.deathSaves);
+  if (saves !== undefined) sheet.deathSaves = saves;
+  const attacks = readAttacks(raw.attacks);
+  if (attacks !== undefined) sheet.attacks = attacks;
+  const spells = readSpells(raw.spells);
+  if (spells !== undefined) sheet.spells = spells;
+  const slots = readSpellSlots(raw.spellSlots);
+  if (slots !== undefined) sheet.spellSlots = slots;
+  const money = readMoney(raw.money);
+  if (money !== undefined) sheet.money = money;
+  // Pre-existing collections (inventory/skills/saves/conditions/traits):
+  // decoded tolerantly so one odd entry never bricks the table sync.
+  const inventory = readInventory(raw.inventory);
+  if (inventory !== undefined) sheet.inventory = inventory;
+  const skills = readSkills(raw.skills);
+  if (skills !== undefined) sheet.skills = skills;
+  const savesList = readSaves(raw.saves);
+  if (savesList !== undefined) sheet.saves = savesList;
+  const conditions = readConditions(raw.conditions);
+  if (conditions !== undefined) sheet.conditions = conditions;
+  const traits = readTraits(raw.traits);
+  if (traits !== undefined) sheet.traits = traits;
   return sheet;
+}
+
+/** Tolerant record reader: object or nothing (never throws). */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function finiteProp(
+  rec: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const v = rec[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function stringProp(
+  rec: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const v = rec[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+/** Valid death-saves block, or undefined when absent/malformed. */
+function readDeathSaves(value: unknown): DeathSaves | undefined {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const successes = finiteProp(rec, "successes");
+  const failures = finiteProp(rec, "failures");
+  return successes === undefined || failures === undefined
+    ? undefined
+    : { successes, failures };
+}
+
+/** Valid attacks, or undefined when the value is not a list. Entries missing name/bonus/damage are skipped. */
+function readAttacks(value: unknown): Attack[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: Attack[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const id = stringProp(rec, "id");
+    const name = stringProp(rec, "name");
+    const bonus = finiteProp(rec, "bonus");
+    const damage = stringProp(rec, "damage");
+    if (!id || !name || bonus === undefined || damage === undefined) continue;
+    out.push({ id, name, bonus, damage });
+  }
+  return out;
+}
+
+/** Valid spells, or undefined when the value is not a list. */
+function readSpells(value: unknown): Spell[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: Spell[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const id = stringProp(rec, "id");
+    const name = stringProp(rec, "name");
+    const level = finiteProp(rec, "level");
+    if (!id || !name || level === undefined) continue;
+    out.push({ id, name, level });
+  }
+  return out;
+}
+
+/** Valid spell slots, or undefined when the value is not a list. */
+function readSpellSlots(value: unknown): SpellSlot[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: SpellSlot[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const level = finiteProp(rec, "level");
+    const total = finiteProp(rec, "total");
+    const used = finiteProp(rec, "used");
+    if (level === undefined || total === undefined || used === undefined) {
+      continue;
+    }
+    out.push({ level, total, used });
+  }
+  return out;
+}
+
+/** Valid coin purse, or undefined when absent/malformed. */
+function readMoney(value: unknown): Money | undefined {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const cp = finiteProp(rec, "cp");
+  const sp = finiteProp(rec, "sp");
+  const ep = finiteProp(rec, "ep");
+  const gp = finiteProp(rec, "gp");
+  const pp = finiteProp(rec, "pp");
+  return cp === undefined ||
+    sp === undefined ||
+    ep === undefined ||
+    gp === undefined ||
+    pp === undefined
+    ? undefined
+    : { cp, sp, ep, gp, pp };
+}
+
+/** Valid inventory lines (bad entries skipped). */
+function readInventory(
+  value: unknown,
+): import("./types").InventoryItem[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: import("./types").InventoryItem[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const id = stringProp(rec, "id");
+    const name = stringProp(rec, "name");
+    const qty = finiteProp(rec, "qty");
+    if (!id || !name || qty === undefined) continue;
+    out.push({ id, name, qty });
+  }
+  return out;
+}
+
+/** Valid skill rows (bad entries skipped). */
+function readSkills(value: unknown): import("./types").Skill[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: import("./types").Skill[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const id = stringProp(rec, "id");
+    const name = stringProp(rec, "name");
+    const ability = stringProp(rec, "ability");
+    const proficient = rec.proficient;
+    if (
+      !id ||
+      !name ||
+      (ability !== "str" &&
+        ability !== "dex" &&
+        ability !== "con" &&
+        ability !== "int" &&
+        ability !== "wis" &&
+        ability !== "cha") ||
+      typeof proficient !== "boolean"
+    ) {
+      continue;
+    }
+    out.push({ id, name, ability, proficient });
+  }
+  return out;
+}
+
+/** Valid save rows (bad entries skipped). */
+function readSaves(value: unknown): import("./types").Save[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: import("./types").Save[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const ability = stringProp(rec, "ability");
+    const proficient = rec.proficient;
+    if (
+      (ability !== "str" &&
+        ability !== "dex" &&
+        ability !== "con" &&
+        ability !== "int" &&
+        ability !== "wis" &&
+        ability !== "cha") ||
+      typeof proficient !== "boolean"
+    ) {
+      continue;
+    }
+    out.push({ ability, proficient });
+  }
+  return out;
+}
+
+/** Valid condition rows (bad entries skipped). */
+function readConditions(
+  value: unknown,
+): import("./types").Condition[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: import("./types").Condition[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const id = stringProp(rec, "id");
+    const name = stringProp(rec, "name");
+    const duration = stringProp(rec, "duration");
+    const effect = stringProp(rec, "effect");
+    if (!id || !name || duration === undefined || effect === undefined) {
+      continue;
+    }
+    out.push({ id, name, duration, effect });
+  }
+  return out;
+}
+
+/** Valid traits block, or undefined when absent/malformed. */
+function readTraits(value: unknown): import("./types").SheetTraits | undefined {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const personality = stringProp(rec, "personality");
+  const ideals = stringProp(rec, "ideals");
+  const bonds = stringProp(rec, "bonds");
+  const flaws = stringProp(rec, "flaws");
+  return personality === undefined ||
+    ideals === undefined ||
+    bonds === undefined ||
+    flaws === undefined
+    ? undefined
+    : { personality, ideals, bonds, flaws };
 }
