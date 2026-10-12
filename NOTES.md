@@ -38,7 +38,7 @@ Ver `docs/superpowers/plans/2026-10-11-vtt-app-fase3.md`. Tasks planejadas:
 
 1. Editor de mapa UI no app (integrar `editor-panel` em `app.ts`) — **pendente**.
 2. Ficha completa UI (painel editável, condições, habilidades) — **pendente**.
-3. Three.js dado 3D (`three-view.ts`) — **pendente**.
+3. Three.js dado 3D (`dice/three-scene.ts` + `dice/die-geometry.ts`) — **feito**: meshes que aterrizam com a face sorteada para cima, número em atlas de canvas, fallback numérico sem WebGL. Ainda não montado no shell (`ui/app-shell.ts`).
 4. Turno e iniciativa (`turn/turn-order.ts`) — **pendente**.
 5. Interop Rust↔TS real (`src-tauri/src/bin/host.rs` + E2E com binário) — **pendente**.
 6. mDNS + UDP cursor (`net/mdns.rs`, `net/udp.rs`) — **pendente**.
@@ -57,7 +57,7 @@ Ver `docs/superpowers/plans/2026-10-11-vtt-app-fase3.md`. Tasks planejadas:
 ## Dividas técnicas conhecidas
 
 - **Turno v1**: `turn-order.ts` não existe ainda — planejado na Fase 3 Task 4. Não há sistema de turno no código atual.
-- **Three.js stub**: `dice/scene.ts` é um stub puro (sem WebGL/DOM). Three.js real (`three-view.ts`) é Fase 3 Task 3.
+- **Three.js montado só em teste**: `dice/three-scene.ts` renderiza de verdade, mas `ui/app-shell.ts` ainda mostra o readout de texto — a montagem no painel é o passo seguinte da Task 3.
 - **Window nativa local**: o app Tauri compila no CI (com deps webkit via apt), mas não localmente (sem webkit/sudo). Verificação local usa `vitest` + `playwright smoke`.
 - **Interop Rust↔TS real**: o bridge invoke atual usa `RoomStore` em memória por janela; o binário `host.rs` (Fase 3 Task 5) vai expor o socket real para o TS.
 - **mDNS/UDP**: `MDNS_SERVICE` e `Channel::UdpCursor` definidos no protocolo, mas sem implementação de socket — Fase 3 Task 6.
