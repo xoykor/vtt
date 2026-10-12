@@ -392,3 +392,294 @@
 .sheet-notes:focus {
   border-color: var(--tavern-gold);
 }
+
+/* ─── Criador de ficha (fullscreen, sem grid/mapa) ─── */
+.sheet-creator {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(200, 134, 42, 0.12) 0%, transparent 60%),
+    linear-gradient(180deg, #0d0805 0%, #1a0f08 40%, #2d1a0e 100%);
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+}
+
+.creator-card {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.creator-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--tavern-gold-light);
+  text-align: center;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 20px rgba(212, 160, 23, 0.4), 0 4px 8px rgba(0, 0, 0, 0.8);
+}
+
+.creator-subtitle {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0.8rem 0 0.4rem;
+}
+
+.creator-header {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+
+.creator-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.creator-field-label {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--tavern-gold);
+  text-transform: uppercase;
+}
+
+.creator-field input,
+.creator-field select,
+.creator-field textarea {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 0.35rem 0.5rem;
+  outline: none;
+  width: 100%;
+}
+
+.creator-field input:focus,
+.creator-field select:focus,
+.creator-field textarea:focus {
+  border-color: var(--tavern-gold);
+}
+
+.creator-prof {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--tavern-gold-light);
+  text-align: center;
+}
+
+.creator-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 2px solid var(--tavern-wood-light);
+  padding-bottom: 0.5rem;
+}
+
+.creator-tab {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.55rem 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 6px 6px 0 0;
+  color: var(--tavern-text-dim);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.creator-tab:hover {
+  color: var(--tavern-parchment);
+  border-color: var(--tavern-gold);
+}
+
+.creator-tab.active {
+  color: var(--tavern-gold-light);
+  border-color: var(--tavern-gold);
+  background: rgba(212, 160, 23, 0.12);
+}
+
+.creator-panels {
+  border: 1px solid rgba(212, 160, 23, 0.25);
+  border-radius: 0 0 6px 6px;
+  padding: 0.8rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.creator-abilities {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+
+.creator-ability {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem;
+  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
+  border: 2px solid var(--tavern-gold);
+  border-radius: 6px;
+}
+
+.creator-ability-name {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--tavern-gold);
+}
+
+.creator-ability-score {
+  width: 100%;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.15rem;
+  outline: none;
+}
+
+.creator-ability-mod {
+  font-size: 0.85rem;
+  color: var(--tavern-text-dim);
+}
+
+.creator-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.creator-skill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--tavern-text);
+}
+
+.creator-skill-check {
+  accent-color: var(--tavern-gold);
+  width: 1rem;
+  height: 1rem;
+}
+
+.creator-skill-name {
+  flex: 1;
+}
+
+.creator-skill-mod {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--tavern-gold);
+}
+
+.creator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.creator-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.creator-row input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 0.3rem 0.5rem;
+  outline: none;
+}
+
+.creator-row select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--tavern-wood-light);
+  border-radius: 3px;
+  color: var(--tavern-parchment);
+  padding: 0.3rem 0.5rem;
+  outline: none;
+}
+
+.creator-add {
+  margin-top: 0.4rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+}
+
+.creator-money {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+}
+
+.creator-footer {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: flex-end;
+  padding-bottom: 1rem;
+}
+
+.creator-footer .menu-btn {
+  padding: 0.7rem 1.6rem;
+  font-size: 1rem;
+}
+
+.creator-save {
+  border-color: var(--tavern-gold-light);
+}
+
+@media (max-width: 640px) {
+  .creator-header {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .creator-abilities {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .creator-money {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .creator-tab {
+    font-size: 0.65rem;
+  }
+}

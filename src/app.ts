@@ -24,7 +24,10 @@ import {
   type Session,
 } from "./ui/app-shell";
 import { createMenu } from "./ui/menu";
+import { createSheetCreator } from "./ui/sheet-creator";
 import { MEMBERS } from "./ui/token-bar";
+import { encodeSheet } from "./sheet/srd";
+import { sheetKey, visibleSheets } from "./sheet/visibility";
 
 /** True inside the Tauri webview (invoke bridge available). */
 function isTauri(): boolean {
@@ -74,6 +77,7 @@ function makeBackend(
   room: OfflineRoom,
   setStatus: (msg: string) => void,
   redraw: () => void,
+  session: Session,
 ): Backend {
   return {
     pushDelta(delta: Delta): void {
@@ -100,8 +104,15 @@ function makeBackend(
       // Wholesale replace (fix round 1): upsert every snapshot entry
       // and REMOVE local keys the host deleted — applying the
       // snapshot upsert-only would leave stale tokens/keys
-      // accumulating locally forever.
-      const delta = replaceDelta(room.getState(), doc.state);
+      // accumulating locally forever. Guests additionally see only
+      // their own sheet partition (plus public sheets); anything else
+      // never lands in the local state.
+      const full = doc.state;
+      const state =
+        session.guest && session.userId !== ""
+          ? visibleSheets(full, "guest", session.userId)
+          : full;
+      const delta = replaceDelta(room.getState(), state);
       room.apply(delta);
       redraw();
       setStatus(
@@ -118,7 +129,7 @@ export function startApp(root: HTMLElement): void {
   const room = createOfflineRoom(MEMBERS);
   const grid = createGrid(10, 8);
   const sheets = createMemberSheets();
-  const session: Session = { backend: null, guest: false, rollSeq: 0 };
+  const session: Session = { backend: null, guest: false, rollSeq: 0, userId: "" };
 
   const shell = createAppShell({ root, room, grid, sheets, session });
 
@@ -157,8 +168,35 @@ export function startApp(root: HTMLElement): void {
         });
     },
     onCreateSheet: () => {
-      menu.hide();
-      shell.show();
+      showSheetCreator();
     },
   });
+
+  /**
+   * Separate fullscreen sheet-creation route (no grid/map): hides the
+   * menu, mounts the creator overlay, and returns to the table on save
+   * (to the menu on cancel).
+   */
+  function showSheetCreator(): void {
+    menu.hide();
+    const { el } = createSheetCreator({
+      ownerId: session.userId !== "" ? session.userId : "p1",
+      onSave: (sheet) => {
+        const key = sheet.ownerId ?? sheet.id;
+        sheets.set(key, sheet);
+        if (session.backend && !session.guest) {
+          session.backend.pushDelta({
+            upsert: { [sheetKey(key)]: encodeSheet(sheet) },
+          });
+        }
+        el.remove();
+        shell.show();
+      },
+      onCancel: () => {
+        el.remove();
+        menu.show();
+      },
+    });
+    root.appendChild(el);
+  }
 }

@@ -10,6 +10,8 @@ export const MEMBERS = ["dm", "p1", "p2", "p3", "p4", "p5"];
 export interface TokenBarOptions {
   /** Called when a member button is clicked. */
   onSelect: (id: string) => void;
+  /** Member buttons to show (defaults to the full table; guests pass only their own id). */
+  members?: string[];
 }
 
 export interface TokenBar {
@@ -21,6 +23,7 @@ export interface TokenBar {
 
 /** Build the member buttons plus the sheet summary line. */
 export function createTokenBar(options: TokenBarOptions): TokenBar {
+  const members = options.members ?? MEMBERS;
   const box = document.createElement("div");
   box.className = "token-bar";
 
@@ -29,7 +32,7 @@ export function createTokenBar(options: TokenBarOptions): TokenBar {
   summary.textContent = "—";
 
   const buttons = new Map<string, HTMLButtonElement>();
-  for (const id of MEMBERS) {
+  for (const id of members) {
     const btn = document.createElement("button");
     btn.textContent = id;
     btn.className = "menu-btn";
