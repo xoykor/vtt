@@ -15,7 +15,7 @@ import type {
   Skill,
   Spell,
 } from "../sheet/types";
-import { MEMBERS } from "./token-bar";
+import type { SessionPeer } from "../session/peers";
 import {
   ABILITY_LABELS,
   ABILITY_ORDER,
@@ -24,7 +24,13 @@ import {
 } from "./sheet-panel";
 
 export interface SheetCreatorOptions {
-  /** Member owning the new sheet (defaults to the first player). */
+  /** Peer que cria a ficha (hash + nome auto-declarado). */
+  authorPeerId?: string;
+  /** GM pode escrever ACL livremente; player tem ACL travada. */
+  isGM?: boolean;
+  /** Peers p/ o GM compartilhar (viewers/controllers). */
+  peers?: SessionPeer[];
+  /** Legado: dono do slot fixo (migração → authorPeerId). */
   ownerId?: string;
   /** Called with the built sheet when the user saves. */
   onSave: (sheet: Sheet) => void;
@@ -91,6 +97,9 @@ function numInput(
 
 /** Build the fullscreen creator; the caller mounts `el` and removes it. */
 export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
+  // Sem slots fixos: autor = peer atual (legado ownerId vira peerId).
+  const authorPeerId = options.authorPeerId ?? options.ownerId ?? "local-player";
+  const isGM = options.isGM ?? false;
   const overlay = document.createElement("div");
   overlay.className = "sheet-creator";
 
@@ -100,20 +109,11 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
 
   card.appendChild(header("Criar Ficha de Personagem"));
 
-  // ── Identity header (always visible) ──
+  // ── Identity header (always visible, sem seletor de jogador) ──
   const head = document.createElement("div");
   head.className = "creator-header";
 
   const nameInput = textInput("creator-name", "Nome do personagem");
-  const ownerSelect = document.createElement("select");
-  ownerSelect.className = "creator-owner";
-  for (const id of MEMBERS) {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = id === "dm" ? "dm (Mestre)" : id;
-    if (id === (options.ownerId ?? "p1")) opt.selected = true;
-    ownerSelect.appendChild(opt);
-  }
   const classInput = textInput("creator-class", "Classe (ex. Guerreiro)");
   const levelInput = numInput("creator-level", 1, 1, 20);
   const raceInput = textInput("creator-race", "Raça");
@@ -136,7 +136,6 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
 
   head.append(
     field("Nome", nameInput),
-    field("Dono (membro)", ownerSelect),
     field("Classe", classInput),
     field("Nível", levelInput),
     field("Raça", raceInput),
@@ -146,6 +145,67 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     field("HP Máx", hpInput),
   );
   card.append(head, profLine);
+
+  // ── Compartilhamento (só GM escreve ACL; player não re-compartilha) ──
+  let publicViewCheck: HTMLInputElement | null = null;
+  let publicControlCheck: HTMLInputElement | null = null;
+  const viewerChecks = new Map<string, HTMLInputElement>();
+  const controllerChecks = new Map<string, HTMLInputElement>();
+  let gmNotesInput: HTMLTextAreaElement | null = null;
+  if (isGM) {
+    const share = document.createElement("div");
+    share.className = "creator-share";
+    const title = document.createElement("h3");
+    title.className = "creator-subtitle";
+    title.textContent = "Compartilhamento (GM)";
+    share.appendChild(title);
+    publicViewCheck = document.createElement("input");
+    publicViewCheck.type = "checkbox";
+    publicViewCheck.className = "creator-public-view";
+    const pvLabel = document.createElement("label");
+    pvLabel.append(publicViewCheck, document.createTextNode(" Visível p/ todos (publicView)"));
+    publicControlCheck = document.createElement("input");
+    publicControlCheck.type = "checkbox";
+    publicControlCheck.className = "creator-public-control";
+    const pcLabel = document.createElement("label");
+    pcLabel.append(publicControlCheck, document.createTextNode(" Controlável p/ todos (publicControl)"));
+    share.append(pvLabel, pcLabel);
+    const peers = options.peers ?? [];
+    if (peers.length > 0) {
+      const list = document.createElement("div");
+      list.className = "creator-share-list";
+      for (const peer of peers) {
+        if (peer.peerId === authorPeerId) continue;
+        const row = document.createElement("div");
+        row.className = "creator-share-row";
+        const name = document.createElement("span");
+        name.textContent = `${peer.displayName} (${peer.peerId})`;
+        const vCheck = document.createElement("input");
+        vCheck.type = "checkbox";
+        vCheck.className = "creator-viewer-check";
+        vCheck.dataset.peer = peer.peerId;
+        const vLabel = document.createElement("label");
+        vLabel.append(vCheck, document.createTextNode(" ver"));
+        const cCheck = document.createElement("input");
+        cCheck.type = "checkbox";
+        cCheck.className = "creator-controller-check";
+        cCheck.dataset.peer = peer.peerId;
+        const cLabel = document.createElement("label");
+        cLabel.append(cCheck, document.createTextNode(" controlar"));
+        viewerChecks.set(peer.peerId, vCheck);
+        controllerChecks.set(peer.peerId, cCheck);
+        row.append(name, vLabel, cLabel);
+        list.appendChild(row);
+      }
+      share.appendChild(list);
+    }
+    gmNotesInput = document.createElement("textarea");
+    gmNotesInput.className = "creator-gm-notes";
+    gmNotesInput.rows = 3;
+    gmNotesInput.placeholder = "Notas do GM (nunca sincronizam p/ jogadores)...";
+    share.appendChild(field("Notas do GM", gmNotesInput));
+    card.appendChild(share);
+  }
 
   // ── Tabs ──
   const tabs = document.createElement("div");
@@ -429,7 +489,6 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
     const sheet: Sheet = {
       id: uid("sheet"),
       name: nameInput.value.trim() || "Sem nome",
-      ownerId: ownerSelect.value,
       level,
       charClass: classInput.value.trim(),
       profBonus: profBonusForLevel(level),
@@ -454,6 +513,31 @@ export function createSheetCreator(options: SheetCreatorOptions): SheetCreator {
       backstory: backstoryInput.value,
       notes: notesInput.value,
     };
+    // ACL: player cria a própria (auto controllers=[creator], sem
+    // re-compartilhar); GM escreve ACL livremente via UI acima.
+    if (isGM) {
+      const viewers: string[] = [];
+      const controllers: string[] = [authorPeerId];
+      for (const [peerId, check] of viewerChecks) {
+        if (check.checked) viewers.push(peerId);
+      }
+      for (const [peerId, check] of controllerChecks) {
+        if (check.checked) controllers.push(peerId);
+      }
+      sheet.viewers = viewers;
+      sheet.controllers = controllers;
+      sheet.publicView = publicViewCheck?.checked ?? false;
+      sheet.publicControl = publicControlCheck?.checked ?? false;
+      const gmNotes = gmNotesInput?.value.trim() ?? "";
+      if (gmNotes.length > 0) sheet.gmNotes = gmNotes;
+    } else {
+      sheet.controllers = [authorPeerId];
+      sheet.viewers = [];
+      sheet.publicView = false;
+      sheet.publicControl = false;
+    }
+    // Migração: ownerId espelha o autor (legado lê ownerId).
+    sheet.ownerId = authorPeerId;
     options.onSave(sheet);
   });
   footer.append(cancelBtn, saveBtn);

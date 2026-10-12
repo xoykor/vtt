@@ -3,6 +3,9 @@
 // mutation applies via applyDelta, the same ordered-TCP path the real
 // host broadcasts on. Remote join (joinRoom) is intentionally unused
 // here: there are no peers offline, only the simulated host.
+// Sessão sem slots: peers ilimitados (`peer:<id>`), sem limite, sem
+// seletor de jogador. Quem hospeda = GM inicial; quem entra com
+// código (`sala#segredo`) = player. Kick = remover peer + rotar secret.
 // No central server; no WotC art.
 
 import {
@@ -22,6 +25,12 @@ import {
   type Token,
 } from "../map/tokens";
 import type { Point } from "../map/grid";
+import {
+  createPeer,
+  createSecret,
+  inviteCode as makeInviteCode,
+  type SessionPeer,
+} from "../session/peers";
 
 export interface OfflineRoom {
   /** Deterministic host descriptor (room-5199, v1.0). */
@@ -36,6 +45,40 @@ export interface OfflineRoom {
   apply(delta: Delta): void;
   /** Host-authoritative move; false when unknown/forbidden/invalid. */
   moveToken(id: string, pos: Point): boolean;
+  /** Peers da sessão (sem slots, sem limite), em memória. */
+  peers(): SessionPeer[];
+  /** Adiciona peer (host=GM, join=player); em memória, sem limite. */
+  addPeer(displayName: string, isGM: boolean): SessionPeer;
+  /** Remove peer (kick); false quando inexistente. */
+  removePeer(peerId: string): boolean;
+  /** Segredo atual da sala (parte do convite). */
+  getSecret(): string;
+  /** Rota o segredo (kick invalida convites antigos); retorna o novo. */
+  rotateSecret(): string;
+  /** Código de convite atual (`sala#segredo`). */
+  inviteCode(): string;
+}
+
+/** Prefixo reservado p/ futura partição de peers (`peer:<peerId>`). */
+export const PEER_PREFIX = "peer:";
+
+/** Chave reservada p/ segredo da sala (`room:secret`). */
+export const ROOM_SECRET_KEY = "room:secret";
+
+/** Canonical key for a hosted peer: `peer:<id>` (reservado, em memória por ora). */
+export function peerKey(id: string): string {
+  if (id.length === 0) throw new Error("missing peer id");
+  return `${PEER_PREFIX}${id}`;
+}
+
+/** True for keys in the peer partition. */
+export function isPeerKey(key: string): boolean {
+  return key.startsWith(PEER_PREFIX);
+}
+
+/** Código de convite `sala#segredo` (re-export p/ testes/UI). */
+export function inviteCodeFor(room: string, secret: string): string {
+  return makeInviteCode(room, secret);
 }
 
 /**
@@ -52,6 +95,11 @@ export function tokenKey(id: string): string {
  * Host `memberIds` locally: one token per member on row 0
  * (`{x: i, y: 0}`, hp 10) under `token:<id>` keys. Pure host
  * simulation; no sockets.
+ *
+ * Legado: `memberIds` criava slots fixos (`dm`,`p1`..). Novo modelo
+ * não usa slots — chame com `[]` e adicione peers via `addPeer`
+ * (ilimitado, em memória; RoomState/delta intactos p/ mapa/dados/rede).
+ * O parâmetro permanece p/ compat com snapshots antigos.
  */
 export function createOfflineRoom(memberIds: string[]): OfflineRoom {
   const info = createRoom(5199);
@@ -60,6 +108,9 @@ export function createOfflineRoom(memberIds: string[]): OfflineRoom {
     const token = createToken(id, { x: i, y: 0 }, 10);
     state = applyDelta(state, { upsert: { [tokenKey(id)]: encodeToken(token) } });
   });
+  // Sessão em memória (não viaja no RoomState: formato de rede intacto).
+  let peers: SessionPeer[] = [];
+  let secret = createSecret();
   return {
     info,
     tokenCount(): number {
@@ -89,6 +140,29 @@ export function createOfflineRoom(memberIds: string[]): OfflineRoom {
       }
       state = applyDelta(state, { ...res.delta, upsert });
       return true;
+    },
+    peers(): SessionPeer[] {
+      return [...peers];
+    },
+    addPeer(displayName: string, isGM: boolean): SessionPeer {
+      const peer = createPeer(displayName, isGM);
+      if (!peers.some((p) => p.peerId === peer.peerId)) peers.push(peer);
+      return peer;
+    },
+    removePeer(peerId: string): boolean {
+      const before = peers.length;
+      peers = peers.filter((p) => p.peerId !== peerId);
+      return peers.length < before;
+    },
+    getSecret(): string {
+      return secret;
+    },
+    rotateSecret(): string {
+      secret = createSecret();
+      return secret;
+    },
+    inviteCode(): string {
+      return makeInviteCode(info.room, secret);
     },
   };
 }
