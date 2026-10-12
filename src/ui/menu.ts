@@ -1,4 +1,4 @@
-// Tavern start menu: SVG backdrop plus the three buttons (Hospedar /
+// Menu start menu: SVG backdrop plus the three buttons (Hospedar /
 // Entrar / Criar Ficha) with the join panel (IP:Porta) and a status
 // line. Pure DOM: every action goes through the handlers the caller
 // passes in, so this module knows nothing about rooms or the bridge.
@@ -25,10 +25,10 @@ export interface Menu {
   setStatus(message: string, kind?: NoticeKind): void;
 }
 
-/** SVG silhouette of a medieval tavern for the background. */
-function tavernSvg(): string {
+/** SVG silhouette of a medieval menu for the background. */
+function menuSvg(): string {
   return `
-    <svg class="tavern-silhouette" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
+    <svg class="menu-silhouette" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="roofGrad" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" style="stop-color:#3d2517;stop-opacity:1" />
@@ -84,13 +84,13 @@ function tavernSvg(): string {
   `;
 }
 
-/** Build the tavern menu (backdrop, title, three buttons, join panel). */
+/** Build the menu (backdrop, title, three buttons, join panel). */
 export function createMenu(root: HTMLElement, handlers: MenuHandlers): Menu {
   root.innerHTML = "";
 
   const bg = document.createElement("div");
-  bg.className = "tavern-bg";
-  bg.innerHTML = tavernSvg();
+  bg.className = "menu-bg";
+  bg.innerHTML = menuSvg();
   root.appendChild(bg);
 
   const menuContainer = document.createElement("div");

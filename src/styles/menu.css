@@ -1,22 +1,22 @@
 /* ─── VTT D&D 5e — Menu Inicial ─── */
-/* Tema: Taverna medieval (madeira escura, tons quentes, verde + dourado) */
+/* Tema: Menu medieval (madeira escura, tons quentes, verde + dourado) */
 
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
 
 :root {
-  --tavern-dark: #1a0f08;
-  --tavern-wood: #2d1a0e;
-  --tavern-wood-light: #3d2517;
-  --tavern-amber: #c8862a;
-  --tavern-amber-light: #e8a83e;
-  --tavern-gold: #d4a017;
-  --tavern-gold-light: #f0c040;
-  --tavern-green: #2d5a27;
-  --tavern-green-light: #3d7a35;
-  --tavern-green-dark: #1a3a15;
-  --tavern-parchment: #f4e8c8;
-  --tavern-text: #e8dcc8;
-  --tavern-text-dim: #b8a888;
+  --menu-dark: #1a0f08;
+  --menu-wood: #2d1a0e;
+  --menu-wood-light: #3d2517;
+  --menu-amber: #c8862a;
+  --menu-amber-light: #e8a83e;
+  --menu-gold: #d4a017;
+  --menu-gold-light: #f0c040;
+  --menu-green: #2d5a27;
+  --menu-green-light: #3d7a35;
+  --menu-green-dark: #1a3a15;
+  --menu-parchment: #f4e8c8;
+  --menu-text: #e8dcc8;
+  --menu-text-dim: #b8a888;
   --font-display: 'Cinzel', 'Times New Roman', Georgia, serif;
   --font-body: 'Crimson Text', Georgia, 'Times New Roman', serif;
 }
@@ -32,7 +32,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   font-family: var(--font-body);
-  background: var(--tavern-dark);
+  background: var(--menu-dark);
 }
 
 #app {
@@ -41,8 +41,8 @@ html, body {
   position: relative;
 }
 
-/* ─── Fundo da Taverna ─── */
-.tavern-bg {
+/* ─── Fundo da Menu ─── */
+.menu-bg {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -70,8 +70,8 @@ html, body {
     linear-gradient(180deg, #0d0805 0%, #1a0f08 40%, #2d1a0e 100%);
 }
 
-/* Silhueta de taverna via SVG */
-.tavern-silhouette {
+/* Silhueta de menu via SVG */
+.menu-silhouette {
   position: fixed;
   bottom: 0;
   left: 0;
@@ -99,7 +99,7 @@ html, body {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 6vw, 4.5rem);
   font-weight: 900;
-  color: var(--tavern-gold-light);
+  color: var(--menu-gold-light);
   text-shadow:
     0 0 20px rgba(212, 160, 23, 0.4),
     0 4px 8px rgba(0, 0, 0, 0.8),
@@ -113,7 +113,7 @@ html, body {
 .menu-subtitle {
   font-family: var(--font-body);
   font-size: clamp(1rem, 2vw, 1.4rem);
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   font-style: italic;
   margin-bottom: 3rem;
   text-align: center;
@@ -124,7 +124,7 @@ html, body {
 .menu-ornament {
   width: 200px;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--tavern-gold), transparent);
+  background: linear-gradient(90deg, transparent, var(--menu-gold), transparent);
   margin-bottom: 2.5rem;
   position: relative;
 }
@@ -135,9 +135,9 @@ html, body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   font-size: 0.8rem;
-  background: var(--tavern-dark);
+  background: var(--menu-dark);
   padding: 0 0.5rem;
 }
 
@@ -156,10 +156,10 @@ html, body {
   font-weight: 700;
   letter-spacing: 0.04em;
   padding: 1rem 2rem;
-  border: 3px solid var(--tavern-gold);
+  border: 3px solid var(--menu-gold);
   border-radius: 6px;
-  background: linear-gradient(180deg, var(--tavern-green-light) 0%, var(--tavern-green) 50%, var(--tavern-green-dark) 100%);
-  color: var(--tavern-parchment);
+  background: linear-gradient(180deg, var(--menu-green-light) 0%, var(--menu-green) 50%, var(--menu-green-dark) 100%);
+  color: var(--menu-parchment);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -184,7 +184,7 @@ html, body {
 
 .menu-btn:hover {
   transform: translateY(-2px);
-  border-color: var(--tavern-gold-light);
+  border-color: var(--menu-gold-light);
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.6),
     0 0 20px rgba(212, 160, 23, 0.3),
@@ -217,7 +217,7 @@ html, body {
   max-width: 380px;
   padding: 1.5rem;
   background: rgba(26, 15, 8, 0.9);
-  border: 2px solid var(--tavern-gold);
+  border: 2px solid var(--menu-gold);
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
@@ -229,7 +229,7 @@ html, body {
 .join-panel label {
   font-family: var(--font-display);
   font-size: 0.9rem;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   letter-spacing: 0.03em;
 }
 
@@ -237,16 +237,16 @@ html, body {
   font-family: var(--font-body);
   font-size: 1.1rem;
   padding: 0.7rem 1rem;
-  border: 2px solid var(--tavern-wood-light);
+  border: 2px solid var(--menu-wood-light);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.4);
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   outline: none;
   transition: border-color 0.2s ease;
 }
 
 .join-panel input:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .join-panel .panel-buttons {
@@ -266,7 +266,7 @@ html, body {
   margin-top: 1.5rem;
   font-family: var(--font-body);
   font-size: 0.95rem;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   text-align: center;
   min-height: 1.5em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);

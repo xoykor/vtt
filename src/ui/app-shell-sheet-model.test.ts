@@ -46,7 +46,7 @@ function makeSheets(): Map<string, Sheet> {
   };
   const open: Sheet = {
     id: "s-open",
-    name: "Taverna",
+    name: "Menu",
     ac: 10,
     hp: 5,
     maxHp: 5,
@@ -109,8 +109,8 @@ test("mesa não tem seletor de jogador; seleção define user.character", () => 
     );
     expect(labels).not.toContain("dm");
     expect(labels).not.toContain("p1");
-    // Só visíveis: Minha + Taverna (ordenadas).
-    expect(labels.sort()).toEqual(["Minha", "Taverna"]);
+    // Só visíveis: Minha + Menu (ordenadas).
+    expect(labels.sort()).toEqual(["Menu", "Minha"]);
     // Clicar define character (padrão p/ falar/rolar).
     const btn = [...root.querySelectorAll<HTMLButtonElement>(".token-bar button")].find(
       (b) => b.textContent === "Minha",

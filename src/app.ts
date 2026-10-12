@@ -1,4 +1,4 @@
-// Playable shell bootstrap: tavern menu + sheet creator + saved
+// Playable shell bootstrap: menu + sheet creator + saved
 // character library + table shell (src/ui/app-shell.ts). The map grid
 // only exists inside a session: saving a sheet goes to the library
 // (name, class, level, portrait) with view/edit/delete and entering a

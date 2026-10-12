@@ -1,6 +1,6 @@
 // Saved-character library view: list of stored sheets (name, class,
 // level, portrait) with view/edit/delete plus entering a session with
-// that character (host as GM or join with IP). Pure DOM, tavern theme.
+// that character (host as GM or join with IP). Pure DOM, menu theme.
 // Never mounts the map/grid/table: no canvas, no `.app-content`.
 
 import type { Sheet } from "../sheet/types";
@@ -18,7 +18,7 @@ export interface LibraryHandlers {
   onHost(sheet: Sheet): void;
   /** "Entrar": join a session with this character + address. */
   onJoin(sheet: Sheet, address: string): void;
-  /** Back to the tavern menu. */
+  /** Back to the menu. */
   onBack(): void;
 }
 
@@ -101,7 +101,7 @@ export function createCharacterLibrary(
   joinAddr.setAttribute("aria-label", "Endereço da sala (IP:Porta)");
   toolbar.appendChild(joinAddr);
 
-  const backBtn = actionButton("← Taverna", "library-back");
+  const backBtn = actionButton("← Menu", "library-back");
   backBtn.addEventListener("click", () => handlers.onBack());
   toolbar.appendChild(backBtn);
   card.appendChild(toolbar);

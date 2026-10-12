@@ -1,12 +1,12 @@
 /* ─── VTT D&D 5e — Painel de Ficha (estilo Roll20) ─── */
-/* Tema taverna: verde/dourado, painel lateral direito com scroll. */
+/* Tema menu: verde/dourado, painel lateral direito com scroll. */
 
 .sheet-panel {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
   font-family: var(--font-body);
-  color: var(--tavern-text);
+  color: var(--menu-text);
   min-width: 0;
 }
 
@@ -14,7 +14,7 @@
   font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   text-align: center;
   letter-spacing: 0.06em;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -32,9 +32,9 @@
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  border: 3px solid var(--tavern-gold);
+  border: 3px solid var(--menu-gold);
   background:
-    radial-gradient(circle at 50% 35%, var(--tavern-wood-light), var(--tavern-wood));
+    radial-gradient(circle at 50% 35%, var(--menu-wood-light), var(--menu-wood));
   cursor: pointer;
   overflow: hidden;
   display: flex;
@@ -48,7 +48,7 @@
 }
 
 .sheet-photo:hover {
-  border-color: var(--tavern-gold-light);
+  border-color: var(--menu-gold-light);
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.6),
     0 0 16px rgba(212, 160, 23, 0.35);
@@ -79,9 +79,9 @@
   font-size: 1.1rem;
   font-weight: 700;
   text-align: center;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   background: rgba(0, 0, 0, 0.35);
-  border: 2px solid var(--tavern-wood-light);
+  border: 2px solid var(--menu-wood-light);
   border-radius: 4px;
   padding: 0.35rem 0.6rem;
   width: 100%;
@@ -90,7 +90,7 @@
 }
 
 .sheet-name:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .sheet-stats {
@@ -113,16 +113,16 @@
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
 }
 
 .sheet-stat input {
   width: 100%;
   text-align: center;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 700;
@@ -132,7 +132,7 @@
 }
 
 .sheet-stat input:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 /* ─── Seções ─── */
@@ -147,7 +147,7 @@
   font-family: var(--font-display);
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   letter-spacing: 0.08em;
   margin-bottom: 0.5rem;
   text-transform: uppercase;
@@ -166,11 +166,11 @@
   align-items: center;
   gap: 0.15rem;
   padding: 0.45rem 0.2rem;
-  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
-  border: 2px solid var(--tavern-gold);
+  background: linear-gradient(180deg, var(--menu-wood-light), var(--menu-wood));
+  border: 2px solid var(--menu-gold);
   border-radius: 6px;
   cursor: pointer;
-  color: var(--tavern-text);
+  color: var(--menu-text);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -186,16 +186,16 @@
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
 }
 
 .ability-score {
   width: 100%;
   text-align: center;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 700;
@@ -205,12 +205,12 @@
 }
 
 .ability-score:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .ability-mod {
   font-size: 0.8rem;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
 }
 
 /* ─── Linhas (salvamentos / perícias / inventário) ─── */
@@ -229,7 +229,7 @@
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid transparent;
   border-radius: 4px;
-  color: var(--tavern-text);
+  color: var(--menu-text);
   cursor: pointer;
   font-family: var(--font-body);
   font-size: 0.9rem;
@@ -243,7 +243,7 @@
 }
 
 .sheet-prof {
-  accent-color: var(--tavern-gold);
+  accent-color: var(--menu-gold);
   width: 1rem;
   height: 1rem;
   cursor: pointer;
@@ -262,7 +262,7 @@
   font-family: var(--font-display);
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   flex-shrink: 0;
 }
 
@@ -279,9 +279,9 @@
   flex: 1;
   min-width: 0;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.9rem;
   padding: 0.2rem 0.4rem;
@@ -290,7 +290,7 @@
 }
 
 .sheet-row-input:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .sheet-row-qty {
@@ -305,7 +305,7 @@
 .sheet-row-del {
   background: none;
   border: none;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   cursor: pointer;
   font-size: 0.95rem;
   padding: 0.1rem 0.3rem;
@@ -323,10 +323,10 @@
   margin-top: 0.4rem;
   width: 100%;
   padding: 0.35rem;
-  background: linear-gradient(180deg, var(--tavern-green-light), var(--tavern-green));
-  border: 2px solid var(--tavern-gold);
+  background: linear-gradient(180deg, var(--menu-green-light), var(--menu-green));
+  border: 2px solid var(--menu-gold);
   border-radius: 4px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-display);
   font-size: 0.75rem;
   font-weight: 700;
@@ -353,15 +353,15 @@
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   text-transform: uppercase;
 }
 
 .sheet-field input {
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.9rem;
   padding: 0.3rem 0.5rem;
@@ -370,7 +370,7 @@
 }
 
 .sheet-field input:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 /* ─── Anotações ─── */
@@ -379,9 +379,9 @@
   min-height: 5rem;
   resize: vertical;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.9rem;
   padding: 0.4rem 0.5rem;
@@ -390,7 +390,7 @@
 }
 
 .sheet-notes:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 /* ─── Linha da última rolagem (crítico / falha) ─── */
@@ -403,8 +403,8 @@
   padding: 0.35rem 0.5rem;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
-  color: var(--tavern-parchment);
+  border: 1px solid var(--menu-wood-light);
+  color: var(--menu-parchment);
 }
 
 .sheet-roll-line.show {
@@ -412,8 +412,8 @@
 }
 
 .sheet-roll-line.crit {
-  border-color: var(--tavern-gold-light);
-  color: var(--tavern-gold-light);
+  border-color: var(--menu-gold-light);
+  color: var(--menu-gold-light);
   box-shadow: 0 0 12px rgba(212, 160, 23, 0.45);
 }
 
@@ -433,9 +433,9 @@
 
 .sheet-identity input {
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.85rem;
   padding: 0.25rem 0.45rem;
@@ -445,7 +445,7 @@
 }
 
 .sheet-identity input:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 /* ─── Abas Core | Bio | Magias/Equip ─── */
@@ -462,21 +462,21 @@
   letter-spacing: 0.05em;
   padding: 0.4rem 0.2rem;
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 5px 5px 0 0;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .sheet-tab:hover {
-  color: var(--tavern-parchment);
-  border-color: var(--tavern-gold);
+  color: var(--menu-parchment);
+  border-color: var(--menu-gold);
 }
 
 .sheet-tab.active {
-  color: var(--tavern-gold-light);
-  border-color: var(--tavern-gold);
+  color: var(--menu-gold-light);
+  border-color: var(--menu-gold);
   background: rgba(212, 160, 23, 0.12);
 }
 
@@ -506,11 +506,11 @@
   gap: 0.45rem;
   cursor: pointer;
   font-size: 0.9rem;
-  color: var(--tavern-text);
+  color: var(--menu-text);
 }
 
 .sheet-check-row input {
-  accent-color: var(--tavern-gold);
+  accent-color: var(--menu-gold);
   width: 1rem;
   height: 1rem;
 }
@@ -525,23 +525,23 @@
 .sheet-inline-field input {
   width: 4rem;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-size: 0.9rem;
   padding: 0.15rem 0.35rem;
   outline: none;
 }
 
 .sheet-inline-field input:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .sheet-init-btn {
-  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
-  border: 1px solid var(--tavern-gold);
+  background: linear-gradient(180deg, var(--menu-wood-light), var(--menu-wood));
+  border: 1px solid var(--menu-gold);
   border-radius: 4px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-display);
   font-size: 0.7rem;
   font-weight: 700;
@@ -560,7 +560,7 @@
   font-family: var(--font-display);
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
 }
 
 .sheet-death-saves {
@@ -582,7 +582,7 @@
 }
 
 .sheet-death-group input {
-  accent-color: var(--tavern-gold);
+  accent-color: var(--menu-gold);
   width: 1rem;
   height: 1rem;
   cursor: pointer;
@@ -598,7 +598,7 @@
 
 .sheet-death-label {
   font-size: 0.85rem;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
 }
 
 /* ─── Ataques / magias / slots ─── */
@@ -609,9 +609,9 @@
 .slot-total,
 .slot-used {
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.85rem;
   padding: 0.2rem 0.35rem;
@@ -625,7 +625,7 @@
 .slot-level:focus,
 .slot-total:focus,
 .slot-used:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .attack-name,
@@ -652,7 +652,7 @@
 .slot-del {
   background: none;
   border: none;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   cursor: pointer;
   font-size: 0.9rem;
   padding: 0.1rem 0.3rem;
@@ -672,9 +672,9 @@
 .sheet-backstory {
   width: 100%;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.9rem;
   padding: 0.35rem 0.5rem;
@@ -683,7 +683,7 @@
 
 .sheet-language:focus,
 .sheet-backstory:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .sheet-backstory {
@@ -723,7 +723,7 @@
   font-family: var(--font-display);
   font-size: 1.6rem;
   font-weight: 900;
-  color: var(--tavern-gold-light);
+  color: var(--menu-gold-light);
   text-align: center;
   letter-spacing: 0.05em;
   text-shadow: 0 0 20px rgba(212, 160, 23, 0.4), 0 4px 8px rgba(0, 0, 0, 0.8);
@@ -733,7 +733,7 @@
   font-family: var(--font-display);
   font-size: 0.85rem;
   font-weight: 700;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin: 0.8rem 0 0.4rem;
@@ -757,7 +757,7 @@
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
   text-transform: uppercase;
 }
 
@@ -765,9 +765,9 @@
 .creator-field select,
 .creator-field textarea {
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.95rem;
   padding: 0.35rem 0.5rem;
@@ -778,21 +778,21 @@
 .creator-field input:focus,
 .creator-field select:focus,
 .creator-field textarea:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .creator-prof {
   font-family: var(--font-display);
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--tavern-gold-light);
+  color: var(--menu-gold-light);
   text-align: center;
 }
 
 .creator-tabs {
   display: flex;
   gap: 0.4rem;
-  border-bottom: 2px solid var(--tavern-wood-light);
+  border-bottom: 2px solid var(--menu-wood-light);
   padding-bottom: 0.5rem;
 }
 
@@ -804,21 +804,21 @@
   letter-spacing: 0.05em;
   padding: 0.55rem 0.4rem;
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 6px 6px 0 0;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .creator-tab:hover {
-  color: var(--tavern-parchment);
-  border-color: var(--tavern-gold);
+  color: var(--menu-parchment);
+  border-color: var(--menu-gold);
 }
 
 .creator-tab.active {
-  color: var(--tavern-gold-light);
-  border-color: var(--tavern-gold);
+  color: var(--menu-gold-light);
+  border-color: var(--menu-gold);
   background: rgba(212, 160, 23, 0.12);
 }
 
@@ -841,8 +841,8 @@
   align-items: center;
   gap: 0.2rem;
   padding: 0.5rem;
-  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
-  border: 2px solid var(--tavern-gold);
+  background: linear-gradient(180deg, var(--menu-wood-light), var(--menu-wood));
+  border: 2px solid var(--menu-gold);
   border-radius: 6px;
 }
 
@@ -851,16 +851,16 @@
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
 }
 
 .creator-ability-score {
   width: 100%;
   text-align: center;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 700;
@@ -870,7 +870,7 @@
 
 .creator-ability-mod {
   font-size: 0.85rem;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
 }
 
 .creator-skills {
@@ -888,11 +888,11 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
-  color: var(--tavern-text);
+  color: var(--menu-text);
 }
 
 .creator-skill-check {
-  accent-color: var(--tavern-gold);
+  accent-color: var(--menu-gold);
   width: 1rem;
   height: 1rem;
 }
@@ -905,7 +905,7 @@
   font-family: var(--font-display);
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--tavern-gold);
+  color: var(--menu-gold);
 }
 
 .creator-list {
@@ -924,9 +924,9 @@
   flex: 1;
   min-width: 0;
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   font-family: var(--font-body);
   font-size: 0.9rem;
   padding: 0.3rem 0.5rem;
@@ -935,9 +935,9 @@
 
 .creator-row select {
   background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--tavern-wood-light);
+  border: 1px solid var(--menu-wood-light);
   border-radius: 3px;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   padding: 0.3rem 0.5rem;
   outline: none;
 }
@@ -967,7 +967,7 @@
 }
 
 .creator-save {
-  border-color: var(--tavern-gold-light);
+  border-color: var(--menu-gold-light);
 }
 
 /* ─── Biblioteca de personagens (sem grid/mesa: só lista salva) ─── */
@@ -996,7 +996,7 @@
   font-family: var(--font-display);
   font-size: 1.6rem;
   font-weight: 900;
-  color: var(--tavern-gold-light);
+  color: var(--menu-gold-light);
   text-align: center;
   letter-spacing: 0.05em;
   text-shadow: 0 0 20px rgba(212, 160, 23, 0.4), 0 4px 8px rgba(0, 0, 0, 0.8);
@@ -1006,7 +1006,7 @@
   font-family: var(--font-body);
   font-size: 1rem;
   font-style: italic;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   text-align: center;
 }
 
@@ -1028,15 +1028,15 @@
   font-family: var(--font-body);
   font-size: 1rem;
   padding: 0.55rem 0.8rem;
-  border: 2px solid var(--tavern-wood-light);
+  border: 2px solid var(--menu-wood-light);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.4);
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   outline: none;
 }
 
 .library-join-address:focus {
-  border-color: var(--tavern-gold);
+  border-color: var(--menu-gold);
 }
 
 .library-status {
@@ -1054,7 +1054,7 @@
 
 .library-empty {
   text-align: center;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
   font-style: italic;
   padding: 2rem 1rem;
   border: 1px dashed rgba(212, 160, 23, 0.4);
@@ -1076,8 +1076,8 @@
   height: 56px;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 2px solid var(--tavern-gold);
-  background: radial-gradient(circle at 50% 35%, var(--tavern-wood-light), var(--tavern-wood));
+  border: 2px solid var(--menu-gold);
+  background: radial-gradient(circle at 50% 35%, var(--menu-wood-light), var(--menu-wood));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1094,7 +1094,7 @@
   font-family: var(--font-display);
   font-size: 1.4rem;
   font-weight: 900;
-  color: var(--tavern-gold-light);
+  color: var(--menu-gold-light);
 }
 
 .library-info {
@@ -1106,7 +1106,7 @@
   font-family: var(--font-display);
   font-size: 1.05rem;
   font-weight: 700;
-  color: var(--tavern-parchment);
+  color: var(--menu-parchment);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1114,7 +1114,7 @@
 
 .library-meta {
   font-size: 0.9rem;
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
 }
 
 .library-actions {
@@ -1149,8 +1149,8 @@
 .library-detail-card {
   width: 100%;
   max-width: 520px;
-  background: linear-gradient(180deg, var(--tavern-wood-light), var(--tavern-wood));
-  border: 2px solid var(--tavern-gold);
+  background: linear-gradient(180deg, var(--menu-wood-light), var(--menu-wood));
+  border: 2px solid var(--menu-gold);
   border-radius: 8px;
   padding: 1.2rem;
   display: flex;
@@ -1164,12 +1164,12 @@
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  border: 3px solid var(--tavern-gold);
+  border: 3px solid var(--menu-gold);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 35%, #4a2f1c, var(--tavern-wood));
+  background: radial-gradient(circle at 50% 35%, #4a2f1c, var(--menu-wood));
 }
 
 .library-detail-photo img {
@@ -1182,16 +1182,16 @@
   font-family: var(--font-display);
   font-size: 1.3rem;
   font-weight: 900;
-  color: var(--tavern-gold-light);
+  color: var(--menu-gold-light);
 }
 
 .library-detail-meta {
-  color: var(--tavern-text-dim);
+  color: var(--menu-text-dim);
 }
 
 .library-detail-bio {
   font-size: 0.95rem;
-  color: var(--tavern-text);
+  color: var(--menu-text);
   white-space: pre-wrap;
 }
 

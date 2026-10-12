@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // App flow: saving in the creator goes to the saved-character library
 // (never the grid/room). The grid/table only mounts after host or join.
-// The creator stays reachable from the library and the tavern menu.
+// The creator stays reachable from the library and the menu.
 import { afterEach, expect, test, vi } from "vitest";
 import { startApp } from "./app";
 import { loadLibrary, type LibraryStorage } from "./sheet/library";
@@ -68,7 +68,7 @@ test("library renders no map/grid outside a session", () => {
     expect(root.querySelector(".char-library")).not.toBeNull();
     expect(root.querySelector(".app-content")).toBeNull();
     expect(root.querySelector("canvas")).toBeNull();
-    // Opening the library straight from the tavern also mounts no grid.
+    // Opening the library straight from the menu also mounts no grid.
     root.querySelector<HTMLButtonElement>(".library-back")!.click();
     clickButton(root, "Meus Personagens");
     expect(root.querySelector(".char-library")).not.toBeNull();
@@ -79,13 +79,13 @@ test("library renders no map/grid outside a session", () => {
   }
 });
 
-test("creator stays reachable from the library and the tavern menu", () => {
+test("creator stays reachable from the library and the menu", () => {
   const storage = memStorage();
   const root = document.createElement("div");
   document.body.appendChild(root);
   try {
     startApp(root, { storage });
-    // From the tavern menu.
+    // From the menu.
     clickButton(root, "Criar Ficha");
     expect(root.querySelector(".sheet-creator")).not.toBeNull();
     root.querySelector<HTMLButtonElement>(".creator-cancel")!.click();

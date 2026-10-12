@@ -26,7 +26,7 @@ export function createDicePanel(options: DicePanelOptions): DicePanel {
   const diceTitle = document.createElement("h2");
   diceTitle.textContent = "Dado";
   diceTitle.style.fontFamily = "var(--font-display)";
-  diceTitle.style.color = "var(--tavern-gold)";
+  diceTitle.style.color = "var(--menu-gold)";
 
   const sidesSel = document.createElement("select");
   for (const s of SIDES) {
@@ -46,7 +46,7 @@ export function createDicePanel(options: DicePanelOptions): DicePanel {
 
   const rollOut = document.createElement("div");
   rollOut.textContent = "—";
-  rollOut.style.color = "var(--tavern-text)";
+  rollOut.style.color = "var(--menu-text)";
 
   box.append(diceTitle, sidesSel, rollBtn, rollOut);
 

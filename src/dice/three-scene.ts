@@ -191,7 +191,7 @@ export function createThreeDiceView(
   readout.style.justifyContent = "center";
   readout.style.gap = "6px";
   readout.style.fontFamily = "var(--font-display)";
-  readout.style.color = "var(--tavern-gold)";
+  readout.style.color = "var(--menu-gold)";
   root.appendChild(readout);
   container.appendChild(root);
 

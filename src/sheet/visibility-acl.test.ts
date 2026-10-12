@@ -36,7 +36,7 @@ function sheetState(): RoomState {
     }),
     "sheet:open": encodeSheet({
       id: "open",
-      name: "Taverna",
+      name: "Menu",
       ac: 10,
       hp: 5,
       maxHp: 5,
