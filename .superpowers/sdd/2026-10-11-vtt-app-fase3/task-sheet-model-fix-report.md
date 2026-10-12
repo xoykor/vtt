@@ -35,9 +35,30 @@ Regressão escrita antes do fix (9 testes, 9 falhas antes, 9 verdes depois):
   criação player normaliza `viewers=[]` sempre (fim da inconsistência [] vs
   undefined em `acl.ts`).
 
-## Validação
+## Validação (round 1)
 
 - `npx vitest run` → 26 arquivos, 187 testes, todos verdes (base 178 + 9 novos).
 - `npm run typecheck` (`tsc --noEmit`) → limpo, exit 0.
 - Mapa/dados/rede intactos: nenhum `src-tauri` tocado; `map-editor`,
   `tokens`, `peer`, `roller` verdes.
+
+## Fix round 2 (final, 2 itens)
+
+TDD: `src/ui/shell-fix-round2.test.ts` (2 testes, 2 falhas antes, 2 verdes
+depois — `vi.mock("./sheet-panel")` captura o objeto entregue ao painel).
+
+- **Item 1** (`src/app.ts`, `syncSheetsFromRoom` ~l89): a guarda do legado
+  público consultava o mapa local stale (`sheets.has(id)`). Agora testa a
+  presença da chave normal no snapshot (`room.getState()[sheetKey(id)]`):
+  room só com `sheet:public:foo=v2` + mapa com `v1` → mapa termina com `v2`.
+- **Item 2** (`src/ui/app-shell.ts`, `showSheet` ~l232): o branch controller
+  renderizava/passa `sheet` completa; controller não-GM com `gmNotes` legado
+  no mapa local veria notas. Agora renderiza `projected` (completa sem
+  `gmNotes` p/ não-GM; idêntica p/ GM) e `setSelected` com `projected`.
+  Persistência intacta: `onChange` ainda usa `prev=sheets.get(selected)`
+  + `sanitizeSheetWrite`, então ACL/gmNotes se preservam no mapa/room.
+
+## Validação (round 2)
+
+- `npx vitest run` → 27 arquivos, 189 testes, todos verdes (187 + 2 novos).
+- `npm run typecheck` (`tsc --noEmit`) → limpo, exit 0.
