@@ -1,27 +1,30 @@
 // Map editor panel (host-only UI): layer selector (floor/wall/asset), a
 // "Colocar tile" button that runs the real host-authoritative
 // `placeTile(map, tile, "host")` and fires `onPlace` with the placed
-// tile, plus a live list of the tiles currently on the map for the
-// selected layer. Pure DOM, no canvas; deltas belong to the caller
-// (the app applies them via `room.apply(delta)`).
+// tile plus the delta to broadcast, plus a live list of the tiles
+// currently on the map for the selected layer. Pure DOM, no canvas;
+// the delta belongs to the caller (the app applies it via
+// `applyDelta`/`room.apply`) — exactly one `placeTile` runs per click.
 // No central server; no WotC art.
 
-import { placeTile, type GameMap, type Tile } from "../map/editor";
+import { placeTile, tileKey, type GameMap, type Tile } from "../map/editor";
+import type { Delta } from "../net/peer";
 
-export type PlaceHandler = (tile: Tile) => void;
+export type PlaceHandler = (tile: Tile, delta: Delta) => void;
 
 const LAYERS = ["floor", "wall", "asset"] as const;
 const DEFAULT_ASSET = "default";
 
 /** First empty cell for `layer` in scan order (y, then x), or null when full. */
-function firstEmptyCell(map: GameMap, layer: string): { x: number; y: number } | null {
+function firstEmptyCell(map: GameMap, layer: string): Tile | null {
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
+      const candidate: Tile = { x, y, layer, asset: DEFAULT_ASSET };
       const occupied = Object.prototype.hasOwnProperty.call(
         map.tiles,
-        `tile:${layer}:${x},${y}`,
+        tileKey(candidate),
       );
-      if (!occupied) return { x, y };
+      if (!occupied) return candidate;
     }
   }
   return null;
@@ -53,23 +56,25 @@ export function renderEditorPanel(
   const tileList = document.createElement("div");
 
   function renderTileList(): void {
-    const prefix = `tile:${layerSel.value}:`;
-    const keys = Object.keys(map.tiles)
-      .filter((k) => k.startsWith(prefix))
-      .sort();
+    const layer = layerSel.value;
+    const keys: string[] = [];
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        const key = tileKey({ x, y, layer, asset: DEFAULT_ASSET });
+        if (Object.prototype.hasOwnProperty.call(map.tiles, key)) keys.push(key);
+      }
+    }
     tileList.textContent = keys.length
-      ? `Tiles (${layerSel.value}): ${keys.join(", ")}`
-      : `Nenhum tile na camada ${layerSel.value}.`;
+      ? `Tiles (${layer}): ${keys.join(", ")}`
+      : `Nenhum tile na camada ${layer}.`;
   }
 
   placeBtn.addEventListener("click", () => {
-    const layer = layerSel.value;
-    const pos = firstEmptyCell(map, layer);
-    if (!pos) return;
-    const tile: Tile = { x: pos.x, y: pos.y, layer, asset: DEFAULT_ASSET };
+    const tile = firstEmptyCell(map, layerSel.value);
+    if (!tile) return;
     const res = placeTile(map, tile, "host");
     if (!res.ok) return;
-    onPlace(tile);
+    onPlace(tile, res.delta);
     renderTileList();
   });
 
