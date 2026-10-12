@@ -5,8 +5,10 @@
 //! authoritative; critical state goes over [`Channel::TcpState`], cursor
 //! updates over [`Channel::UdpCursor`].
 
+pub mod mdns;
 pub mod proto;
 pub mod tcp;
+pub mod udp;
 
 pub use proto::{
     Channel, Handshake, MDNS_SERVICE, PROTOCOL_VERSION,
