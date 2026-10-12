@@ -19,6 +19,7 @@ import type { Sheet } from "./sheet/types";
 import { publishRoll, resolveRoll } from "./dice/roller";
 import { frameForResult } from "./dice/scene";
 import { encodeToken } from "./map/tokens";
+import { createMap, placeTile } from "./map/editor";
 import type { Delta } from "./net/peer";
 import {
   createOfflineRoom,
@@ -30,6 +31,7 @@ import {
   type OfflineRoom,
 } from "./ui/room";
 import { eventToCell, renderMapView } from "./ui/mapview";
+import { renderEditorPanel } from "./ui/editor-panel";
 
 const MEMBERS = ["dm", "p1", "p2", "p3", "p4", "p5"];
 const SIDES = [2, 4, 6, 8, 10, 12, 20, 100];
@@ -72,6 +74,7 @@ interface Backend {
 export function startApp(root: HTMLElement): void {
   const room = createOfflineRoom(MEMBERS);
   const grid = createGrid(10, 8);
+  const gameMap = createMap(grid.width, grid.height);
   let selected = MEMBERS[0];
   let rollSeq = 0;
 
@@ -248,9 +251,33 @@ export function startApp(root: HTMLElement): void {
       .join(" ") + ` = ${result.total}`;
   });
 
+  // Task 1: host-only map editor panel. The panel runs the real
+  // placeTile(map, tile, "host") and hands the placed tile back here;
+  // the delta travels the same ordered path as tokens/rolls —
+  // room.apply locally, push_delta to the hosted room when host.
+  const editorTitle = document.createElement("h2");
+  editorTitle.textContent = "Mapa (host)";
+  const editorBox = document.createElement("div");
+  renderEditorPanel(editorBox, gameMap, (tile) => {
+    const res = placeTile(gameMap, tile, "host");
+    if (!res.ok) return;
+    room.apply(res.delta);
+    if (backend && !guest) backend.pushDelta(res.delta);
+  });
+
   showSheet();
   draw();
-  side.append(sheetTitle, tokenList, sheetBox, diceTitle, sidesSel, rollBtn, rollOut);
+  side.append(
+    sheetTitle,
+    tokenList,
+    sheetBox,
+    diceTitle,
+    sidesSel,
+    rollBtn,
+    rollOut,
+    editorTitle,
+    editorBox,
+  );
   wrap.append(canvas, side);
   root.append(wrap);
 }
